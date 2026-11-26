@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ajx.botforge.permission.PermissionGuide
 import com.ajx.botforge.qq.BotManager
 import com.ajx.botforge.qq.BotStatusRegistry
 import com.ajx.botforge.ui.components.PrimaryButton
@@ -65,7 +66,9 @@ fun DashboardScreen(
     onOpenPlugins: () -> Unit,
     onOpenAbout: () -> Unit,
     /** 启动/停止前台服务；传 null 表示由上层提供原生实现 */
-    onToggleService: () -> Unit = {}
+    onToggleService: () -> Unit = {},
+    /** 补齐通知 / 悬浮窗 / 电池白名单权限 */
+    onRequestPermissions: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val repo = remember { BotForgeRepository() }
@@ -76,6 +79,8 @@ fun DashboardScreen(
     var runningCount by remember { mutableStateOf(0) }
     var serviceRunning by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
+    // 权限状态：只有真的检查过系统才显示提示条，不做假数据
+    var permStatus by remember { mutableStateOf<PermissionGuide.Status?>(null) }
 
     // 真实的连接状态：由 BotStatusRegistry 推送，StateFlow 驱动 UI 刷新。
     // 初版这里只在 LaunchedEffect(Unit) 里读一次快照，之后永不更新，
@@ -94,6 +99,7 @@ fun DashboardScreen(
         // 订阅连接层推送，任何状态变化都立刻反映到首页
         connState.value = BotManager.summary()
         BotStatusRegistry.listener = { connState.value = BotManager.summary() }
+        permStatus = PermissionGuide.status(context)
     }
 
     DisposableEffect(Unit) {
@@ -107,6 +113,8 @@ fun DashboardScreen(
             logCount = repo.logs().size
             serviceText = repo.serviceStatus()
             serviceRunning = repo.isServiceRunning()
+            // 用户可能刚从设置页回来，权限状态跟着刷新
+            permStatus = PermissionGuide.status(context)
         }
     }
 
@@ -220,6 +228,46 @@ fun DashboardScreen(
                 color = TextLow,
                 fontSize = FontSize.micro
             )
+
+            // 权限缺失提示条。
+            //
+            // 这三项权限在 Manifest 里声明了，但旧代码从不主动申请：
+            //  - 通知被关 → 前台服务通知不可见 → 进程降优先级 → 后台容易被冻结断连
+            //  - 悬浮窗被关 → addView 直接 BadTokenException，保活悬浮窗完全失效
+            //  - 电池白名单没加 → 熄屏后进程被系统回收
+            // 缺任何一项都在这里显式提示，并提供一键跳转修复。
+            val ps = permStatus
+            if (ps != null && !ps.allGood) {
+                Spacer(Modifier.height(Spacing.sm))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Bg3, RoundedCornerShape(Radius.md))
+                        .padding(Spacing.sm)
+                ) {
+                    Text(
+                        text = "权限未补齐，可能影响后台保活",
+                        color = TextHigh,
+                        fontSize = FontSize.small,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(Spacing.xxs))
+                    Text(
+                        text = PermissionGuide.missingText(ps),
+                        color = TextLow,
+                        fontSize = FontSize.micro
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    SecondaryButton(
+                        text = "立即补齐权限",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            onRequestPermissions()
+                            permStatus = PermissionGuide.status(context)
+                        }
+                    )
+                }
+            }
         }
 
         Column(

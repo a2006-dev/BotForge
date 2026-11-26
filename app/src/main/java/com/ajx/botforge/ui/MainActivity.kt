@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
+import com.ajx.botforge.permission.PermissionGuide
 import com.ajx.botforge.qq.BotManager
 import com.ajx.botforge.service.BotService
 import com.ajx.botforge.service.ShizukuKeepAlive
@@ -37,6 +38,16 @@ class MainActivity : ComponentActivity() {
 
         val native = NativeActions()
 
+        // 启动即补齐权限：通知权限能弹窗就弹窗；
+        // 悬浮窗/电池白名单只在"首次启动"时跳设置页，避免每次进来都被甩去设置。
+        val firstRun = !getSharedPreferences("perms", MODE_PRIVATE)
+            .getBoolean("guided", false)
+        PermissionGuide.ensureAll(this, jumpSettings = firstRun)
+        if (firstRun) {
+            getSharedPreferences("perms", MODE_PRIVATE).edit()
+                .putBoolean("guided", true).apply()
+        }
+
         setContent {
             BotForgeTheme {
                 AppNavHost(
@@ -44,10 +55,22 @@ class MainActivity : ComponentActivity() {
                     onRequestOverlay = { native.requestOverlay() },
                     onApplyShizuku = { native.applyShizuku() },
                     onReloadBots = { native.reloadBots() },
-                    onToggleService = { native.toggleService() }
+                    onToggleService = { native.toggleService() },
+                    onRequestPermissions = { PermissionGuide.ensureAll(this, true) }
                 )
             }
         }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val granted = grantResults.isNotEmpty() &&
+                grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+        Logger.i("Permission", "通知权限结果 = $granted")
     }
 
     /** 首启写入默认模型，保持与旧版本一致的行为。 */

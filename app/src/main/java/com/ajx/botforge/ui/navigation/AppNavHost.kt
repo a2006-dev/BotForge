@@ -28,7 +28,9 @@ fun AppNavHost(
     onApplyShizuku: () -> Unit = {},
     onReloadBots: () -> Unit = {},
     /** 首页的启动/停止主操作 */
-    onToggleService: () -> Unit = {}
+    onToggleService: () -> Unit = {},
+    /** 补齐通知/悬浮窗/电池白名单权限 */
+    onRequestPermissions: () -> Unit = {}
 ) {
     NavHost(navController = navController, startDestination = Routes.DASHBOARD) {
 
@@ -41,7 +43,8 @@ fun AppNavHost(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
-                onToggleService = onToggleService
+                onToggleService = onToggleService,
+                onRequestPermissions = onRequestPermissions
             )
         }
 
