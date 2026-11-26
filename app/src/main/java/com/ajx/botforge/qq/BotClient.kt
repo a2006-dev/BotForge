@@ -71,6 +71,18 @@ class BotClient(
     private val session = QqApi.Session(cfg.appId, cfg.appSecret)
     private val genSeq = AtomicLong(0L)
 
+    /**
+     * 续连状态必须跨代次保留。
+     *
+     * 初版把 sessionId / seq 放在 Gen 里，每次重连 new 一个 Gen 就归零，
+     * 于是 identify() 永远走 op=2 全量鉴权，QQ 网关那边旧会话一直挂着，
+     * 服务端于是频繁回收连接 —— 表现就是"后台一会儿就重连"。
+     * 现在放进 BotClient 实例级，断线重连优先 op=6 续连，仅服务端明确
+     * 判失效（op=9）时才清空。
+     */
+    @Volatile private var resumeSessionId: String = ""
+    @Volatile private var resumeSeq: Int = 0
+
     @Volatile private var current: Gen? = null
     @Volatile private var runThread: Thread? = null
     @Volatile private var running = false
@@ -222,6 +234,9 @@ class BotClient(
         val ws = WsClient(host, port, path) { Logger.i("Bot", "[g$id] $it") }
 
         val g = Gen(id, ws)
+        // 继承上一次会话的续连状态，重连时优先走 op=6 而不是重新全量鉴权
+        g.sessionId = resumeSessionId
+        g.seq = resumeSeq
         current = g
 
         try {
@@ -369,7 +384,12 @@ class BotClient(
             return
         }
         val op = obj.optInt("op", -1)
-        if (obj.has("s")) g.seq = obj.optInt("s", g.seq)
+        if (obj.has("s")) {
+            g.seq = obj.optInt("s", g.seq)
+            // 同步续连序号：重连时 op=6 要带上最新的 seq，
+            // 否则网关要么重推大量历史事件、要么直接判续连失效。
+            resumeSeq = g.seq
+        }
 
         when (op) {
             0 -> {
@@ -378,6 +398,9 @@ class BotClient(
                     "READY" -> {
                         val d = obj.optJSONObject("d")
                         g.sessionId = d?.optString("session_id") ?: ""
+                        // 新会话建立，写入续连状态，供下次断线使用
+                        resumeSessionId = g.sessionId
+                        resumeSeq = g.seq
                         val user = d?.optJSONObject("user")
                         botNameCache = user?.optString("username") ?: cfg.name
                         g.ready = true
@@ -422,6 +445,9 @@ class BotClient(
                 g.sessionId = ""
                 g.seq = 0
                 g.ready = false
+                // 服务端明确判失效，续连状态作废，下次必须全量鉴权
+                resumeSessionId = ""
+                resumeSeq = 0
                 QqApi.token(session, force = true)
                 runCatching { g.ws.close() }
             }
