@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,7 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.ajx.botforge.qq.BotManager
+import com.ajx.botforge.qq.BotStatusRegistry
 import com.ajx.botforge.ui.components.SectionHeader
 import com.ajx.botforge.ui.components.StatusDot
 import com.ajx.botforge.ui.components.StatusTone
@@ -41,8 +43,7 @@ import com.ajx.botforge.ui.theme.Spacing
 import com.ajx.botforge.ui.theme.TextHigh
 import com.ajx.botforge.ui.theme.TextLow
 import com.ajx.botforge.ui.theme.TextMid
-import com.ajx.botforge.ui.viewmodel.BotListViewModel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * 首页仪表盘。
@@ -59,9 +60,6 @@ fun DashboardScreen(
     onOpenPlugins: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
-    val botVm: BotListViewModel = viewModel()
-    val botState by botVm.state.collectAsStateWithLifecycle()
-
     val repo = remember { BotForgeRepository() }
     var personaCount by remember { mutableStateOf(0) }
     var modelCount by remember { mutableStateOf(0) }
@@ -69,12 +67,35 @@ fun DashboardScreen(
     var serviceText by remember { mutableStateOf("-") }
     var runningCount by remember { mutableStateOf(0) }
 
+    // 真实的连接状态：由 BotStatusRegistry 推送，StateFlow 驱动 UI 刷新。
+    // 初版这里只在 LaunchedEffect(Unit) 里读一次快照，之后永不更新，
+    // 且 runningCount 取的是「配置数量」而非在线数，于是网关早断、
+    // 界面仍显示「运行中 · N 个连接」。这是任务书第三节的虚假状态。
+    val connState = remember { MutableStateFlow(BotManager.summary()) }
+    val summary by connState.collectAsStateWithLifecycle()
+
     LaunchedEffect(Unit) {
         personaCount = repo.personas().size
         modelCount = repo.models().size
         logCount = repo.logs().size
         serviceText = repo.serviceStatus()
         runningCount = repo.runningCount()
+        // 订阅连接层推送，任何状态变化都立刻反映到首页
+        connState.value = BotManager.summary()
+        BotStatusRegistry.listener = { connState.value = BotManager.summary() }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { BotStatusRegistry.listener = null }
+    }
+
+    // 日志条数随运行增长，做一次轻量轮询即可（不涉及连接状态）
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(3000)
+            logCount = repo.logs().size
+            serviceText = repo.serviceStatus()
+        }
     }
 
     Column(
@@ -104,13 +125,21 @@ fun DashboardScreen(
             )
             Spacer(Modifier.height(Spacing.md))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // 状态点颜色严格跟随连接状态，不再用「配置数量 > 0」冒充在线
                 StatusDot(
-                    tone = if (runningCount > 0) StatusTone.Success else StatusTone.Neutral,
+                    tone = when {
+                        summary.loaded == 0 -> StatusTone.Neutral
+                        summary.online == summary.loaded -> StatusTone.Success
+                        summary.online > 0 -> StatusTone.Warning
+                        summary.reconnecting > 0 || summary.connecting > 0 -> StatusTone.Warning
+                        summary.error > 0 -> StatusTone.Danger
+                        else -> StatusTone.Neutral
+                    },
                     size = Sizes.dot
                 )
                 Spacer(Modifier.width(Spacing.sm))
                 Text(
-                    text = if (runningCount > 0) "运行中 · $runningCount 个连接" else serviceText,
+                    text = if (summary.loaded > 0) summary.text else serviceText,
                     color = TextMid,
                     fontSize = FontSize.small
                 )
@@ -129,9 +158,9 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
                 StatTile(
-                    label = "机器人",
-                    value = "${botState.bots.size}",
-                    sub = "${botState.enabledCount} 启用",
+                    label = "在线",
+                    value = "${summary.online}/${summary.loaded}",
+                    sub = if (summary.loaded == 0) "未启动" else "运行中 / 已加载",
                     modifier = Modifier.weight(1f)
                 )
                 StatTile(
