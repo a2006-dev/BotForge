@@ -22,6 +22,10 @@ object Config {
     }
 
     // ------------------------------------------------------- 敏感字段读写
+    /** 旧配置里检测到明文并已迁移；调用方据此决定是否回写，清掉磁盘上的明文 */
+    @Volatile
+    private var migratedAny = false
+
     /**
      * 读取敏感字段：优先从保险箱取；取不到且配置里是明文（旧版本遗留），
      * 则顺手迁移进保险箱并把明文替换成占位符。
@@ -31,8 +35,11 @@ object Config {
         if (inVault.isNotEmpty()) return inVault
         val plain = obj.optString(jsonField)
         if (plain.isEmpty() || plain == SecretStore.PLACEHOLDER) return ""
-        // 旧版本明文 → 迁移
+        // 旧版本明文 → 迁移：真值进保险箱，并把 JSON 里的明文就地替换成占位符。
+        // 注意必须替换，否则迁移只搬了副本，磁盘上仍是明文。
         SecretStore.put(vaultKey, plain)
+        obj.put(jsonField, SecretStore.PLACEHOLDER)
+        migratedAny = true
         Logger.i("Secret", "已迁移明文密钥到保险箱: $vaultKey")
         return plain
     }
@@ -116,6 +123,12 @@ object Config {
                         gs
                     )
                 )
+            }
+            // 有明文被迁移 → 立即回写，把磁盘上的明文清掉
+            if (migratedAny) {
+                migratedAny = false
+                saveBots(list)
+                Logger.i("Secret", "已回写 bots 配置，明文密钥已清除")
             }
             list
         } catch (e: Exception) {
@@ -235,6 +248,12 @@ object Config {
                         o.optInt("maxTokens", 400)
                     )
                 )
+            }
+            // 有明文被迁移 → 立即回写，把磁盘上的明文清掉
+            if (migratedAny) {
+                migratedAny = false
+                saveModels(list)
+                Logger.i("Secret", "已回写 models 配置，明文密钥已清除")
             }
             list
         } catch (e: Exception) {
