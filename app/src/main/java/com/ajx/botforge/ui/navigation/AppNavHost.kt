@@ -26,7 +26,9 @@ fun AppNavHost(
     onRequestBattery: () -> Unit = {},
     onRequestOverlay: () -> Unit = {},
     onApplyShizuku: () -> Unit = {},
-    onReloadBots: () -> Unit = {}
+    onReloadBots: () -> Unit = {},
+    /** 首页的启动/停止主操作 */
+    onToggleService: () -> Unit = {}
 ) {
     NavHost(navController = navController, startDestination = Routes.DASHBOARD) {
 
@@ -38,7 +40,8 @@ fun AppNavHost(
                 onOpenLogs = { navController.navigate(Routes.LOGS) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onOpenPlugins = { navController.navigate(Routes.PLUGINS) },
-                onOpenAbout = { navController.navigate(Routes.ABOUT) }
+                onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onToggleService = onToggleService
             )
         }
 

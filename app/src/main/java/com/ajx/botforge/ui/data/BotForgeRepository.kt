@@ -4,6 +4,7 @@ import android.content.Context
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
 import com.ajx.botforge.qq.BotManager
+import com.ajx.botforge.service.BotService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -158,5 +159,43 @@ class BotForgeRepository {
 
     suspend fun reloadBots(context: Context): Unit = withContext(Dispatchers.IO) {
         BotManager.reload(context.applicationContext)
+    }
+
+    // ------------------------------------------------------------ 服务启停
+
+    /** 服务是否在运行（前台服务存活 ⇒ 主循环在跑，但不代表在线） */
+    fun isServiceRunning(): Boolean = BotService.instance != null
+
+    /**
+     * 启动前台服务。
+     *
+     * 返回 null 表示启动成功，否则返回给用户看的原因。
+     * 空配置直接拒绝，避免用户点了没反应又不知道原因。
+     */
+    fun startService(context: Context): String? {
+        if (BotService.instance != null) return null
+        val enabled = Config.loadBots().filter { it.enabled }
+        if (enabled.isEmpty()) {
+            return "没有已启用的机器人，请先在「机器人配置」里启用一个"
+        }
+        if (enabled.any { it.appId.isBlank() || it.appSecret.isBlank() }) {
+            return "有机器人缺少 AppID 或密钥，请先补全"
+        }
+        return runCatching {
+            BotService.start(context.applicationContext)
+            null
+        }.getOrElse { "启动失败：${it.message ?: it.javaClass.simpleName}" }
+    }
+
+    /** 停止前台服务，同时断开所有网关连接 */
+    fun stopService(context: Context) {
+        runCatching {
+            val i = android.content.Intent(context, BotService::class.java)
+                .setAction(BotService.ACTION_STOP)
+            context.startService(i)
+        }.onFailure {
+            // Android 12+ 后台无法 startService，退化为直接停 BotManager
+            BotManager.stop()
+        }
     }
 }

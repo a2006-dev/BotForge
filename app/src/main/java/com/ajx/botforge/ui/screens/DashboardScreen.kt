@@ -3,6 +3,7 @@ package com.ajx.botforge.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,10 +25,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ajx.botforge.qq.BotManager
 import com.ajx.botforge.qq.BotStatusRegistry
+import com.ajx.botforge.ui.components.PrimaryButton
+import com.ajx.botforge.ui.components.SecondaryButton
 import com.ajx.botforge.ui.components.SectionHeader
 import com.ajx.botforge.ui.components.StatusDot
 import com.ajx.botforge.ui.components.StatusTone
@@ -35,6 +39,7 @@ import com.ajx.botforge.ui.data.BotForgeRepository
 import com.ajx.botforge.ui.theme.Bg0
 import com.ajx.botforge.ui.theme.Bg1
 import com.ajx.botforge.ui.theme.Bg2
+import com.ajx.botforge.ui.theme.Bg3
 import com.ajx.botforge.ui.theme.Brand
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Radius
@@ -58,14 +63,19 @@ fun DashboardScreen(
     onOpenLogs: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPlugins: () -> Unit,
-    onOpenAbout: () -> Unit
+    onOpenAbout: () -> Unit,
+    /** 启动/停止前台服务；传 null 表示由上层提供原生实现 */
+    onToggleService: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val repo = remember { BotForgeRepository() }
     var personaCount by remember { mutableStateOf(0) }
     var modelCount by remember { mutableStateOf(0) }
     var logCount by remember { mutableStateOf(0) }
     var serviceText by remember { mutableStateOf("-") }
     var runningCount by remember { mutableStateOf(0) }
+    var serviceRunning by remember { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<String?>(null) }
 
     // 真实的连接状态：由 BotStatusRegistry 推送，StateFlow 驱动 UI 刷新。
     // 初版这里只在 LaunchedEffect(Unit) 里读一次快照，之后永不更新，
@@ -80,6 +90,7 @@ fun DashboardScreen(
         logCount = repo.logs().size
         serviceText = repo.serviceStatus()
         runningCount = repo.runningCount()
+        serviceRunning = repo.isServiceRunning()
         // 订阅连接层推送，任何状态变化都立刻反映到首页
         connState.value = BotManager.summary()
         BotStatusRegistry.listener = { connState.value = BotManager.summary() }
@@ -89,15 +100,51 @@ fun DashboardScreen(
         onDispose { BotStatusRegistry.listener = null }
     }
 
-    // 日志条数随运行增长，做一次轻量轮询即可（不涉及连接状态）
+    // 日志条数与服务存活随运行变化，做一次轻量轮询即可（不涉及连接状态）
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(3000)
             logCount = repo.logs().size
             serviceText = repo.serviceStatus()
+            serviceRunning = repo.isServiceRunning()
         }
     }
 
+    // toast 自动消失，避免常驻遮挡
+    LaunchedEffect(toast) {
+        if (toast != null) {
+            kotlinx.coroutines.delay(2600)
+            toast = null
+        }
+    }
+
+    /**
+     * 启停服务
+     *
+     * 这里是首页唯一的主操作。之前整个 App 只有旧 Activity 里有启停入口，
+     * 迁移到 Compose 后链路断掉，用户能看状态却无法启动 —— 这是功能缺口，不是设计。
+     */
+    fun toggle() {
+        if (serviceRunning) {
+            repo.stopService(context)
+            serviceRunning = false
+            serviceText = repo.serviceStatus()
+            toast = "已停止服务"
+        } else {
+            val reason = repo.startService(context)
+            if (reason != null) {
+                toast = reason
+            } else {
+                serviceRunning = true
+                serviceText = repo.serviceStatus()
+                toast = "已启动，正在连接 QQ 网关…"
+            }
+        }
+        // 立刻刷新一次聚合状态，不必等 3 秒轮询
+        connState.value = BotManager.summary()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -144,6 +191,35 @@ fun DashboardScreen(
                     fontSize = FontSize.small
                 )
             }
+
+            // 主操作：启动 / 停止
+            //
+            // 放在状态下面而不是藏进设置里 —— 这是整个 App 最主要的动作，
+            // 用户打开首页第一件事就是让机器人跑起来。
+            Spacer(Modifier.height(Spacing.md))
+            if (serviceRunning) {
+                SecondaryButton(
+                    text = "停止服务",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { toggle() }
+                )
+            } else {
+                PrimaryButton(
+                    text = "启动服务",
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { toggle() }
+                )
+            }
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                text = if (serviceRunning) {
+                    "前台服务运行中，退出界面也不会断开"
+                } else {
+                    "启动后会建立 QQ 网关长连接，状态实时显示"
+                },
+                color = TextLow,
+                fontSize = FontSize.micro
+            )
         }
 
         Column(
@@ -199,6 +275,30 @@ fun DashboardScreen(
             Spacer(Modifier.height(Spacing.lg))
         }
     }
+
+    // 轻量 toast：只用 Compose 绘制，不依赖 Activity 的 Toast，
+    // 这样在任何宿主里都能显示启动失败的具体原因。
+    toast?.let { msg ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(Spacing.lg),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(Bg3, RoundedCornerShape(Radius.md))
+                    .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+            ) {
+                Text(
+                    text = msg,
+                    color = TextHigh,
+                    fontSize = FontSize.small
+                )
+            }
+        }
+    }
+}
 }
 
 @Composable

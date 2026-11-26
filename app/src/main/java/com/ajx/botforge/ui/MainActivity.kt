@@ -43,7 +43,8 @@ class MainActivity : ComponentActivity() {
                     onRequestBattery = { native.requestBatteryWhitelist() },
                     onRequestOverlay = { native.requestOverlay() },
                     onApplyShizuku = { native.applyShizuku() },
-                    onReloadBots = { native.reloadBots() }
+                    onReloadBots = { native.reloadBots() },
+                    onToggleService = { native.toggleService() }
                 )
             }
         }
