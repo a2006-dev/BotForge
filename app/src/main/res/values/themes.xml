@@ -44,15 +44,14 @@
         <item name="android:textColorPrimary">@color/t_hi</item>
         <item name="android:textColorSecondary">@color/t_mid</item>
     </style>
-
-    <!-- 兼容别名：其它页面可能引用了旧名字 -->
+    <!-- 兼容别名：其它页面可能引用了旧名字（注意不能与 colors.xml 重名） -->
     <color name="bg">@color/ink_1</color>
     <color name="card">@color/ink_2</color>
     <color name="accent">@color/brand</color>
     <color name="text_main">@color/t_hi</color>
     <color name="text_sub">@color/t_mid</color>
     <color name="ok">@color/run</color>
-    <color name="warn">@color/warn</color>
     <color name="err">@color/danger</color>
+
 
 </resources>
