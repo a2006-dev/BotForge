@@ -14,6 +14,9 @@ class App : Application() {
         instance = this
         Config.init(this)
         com.ajx.botforge.plugin.PluginRegistry.init(this)
+        com.ajx.botforge.plugin.PluginGuard.init(
+            getSharedPreferences("botforge", MODE_PRIVATE)
+        )
         com.ajx.botforge.data.Logger.i("App", "BotForge 启动 v${BuildConfig.VERSION_NAME}")
         createChannels()
     }

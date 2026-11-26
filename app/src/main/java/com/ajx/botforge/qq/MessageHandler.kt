@@ -8,6 +8,7 @@ import com.ajx.botforge.ai.Memory
 import com.ajx.botforge.ai.WebSearch
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
+import com.ajx.botforge.plugin.PluginGuard
 import com.ajx.botforge.plugin.PluginRegistry
 import com.ajx.botforge.plugin.PluginRunner
 
@@ -266,6 +267,8 @@ object MessageHandler {
     private fun helpText(): String {
         val sb = StringBuilder("内置指令\n")
         sb.append("/reset 清空上下文\n/ping 测试在线\n/help 本说明\n")
+        sb.append("/whoami 查看我的 openid\n/allow 把自己加入白名单\n")
+        sb.append("/plugins 插件列表 · /reload-plugins 重扫目录\n")
         val plug = PluginRegistry.all()
         if (plug.isEmpty()) {
             sb.append("\n（未安装插件）")
@@ -320,7 +323,62 @@ object MessageHandler {
             return true
         }
 
+        // /whoami 查看自己的 openid（配白名单用）
+        if (name == "whoami" || name == "我是谁") {
+            val sb = StringBuilder()
+            sb.append("场景：").append(if (ev.scene == "group") "群聊" else "私聊").append("\n")
+            sb.append("你的 openid：\n").append(ev.userOpenId).append("\n")
+            if (ev.scene == "group") {
+                sb.append("\n本群 openid：\n").append(ev.groupOpenId)
+            }
+            sb.append("\n\n白名单用户数：").append(PluginGuard.allowedUsers().size)
+            sb.append("\n群聊插件：").append(if (PluginGuard.groupEnabled) "已开启" else "未开启")
+            reply(bot, ev, sb.toString())
+            return true
+        }
+
+        // /allow <openid> 把某个 openid 加入插件白名单
+        // 安全设计：谁都能发这条，但只能在自己还没被限制时用一次；
+        // 一旦白名单非空，非白名单用户连 /allow 都调不动（下面有 check）。
+        if (name == "allow" || name == "允许") {
+            val target = text.trim().split(Regex("\\s+")).getOrNull(1)
+                ?: ev.userOpenId   // 不带参数就允许自己
+            val users = PluginGuard.allowedUsers()
+            if (users.isNotEmpty() && !users.contains(ev.userOpenId)) {
+                reply(bot, ev, "⛔ 白名单已配置，你没有权限修改。")
+                return true
+            }
+            PluginGuard.addUser(target)
+            reply(bot, ev, "已把 $target 加入插件白名单。\n当前共 ${PluginGuard.allowedUsers().size} 人。")
+            return true
+        }
+
+        // /disallow <openid> 移出白名单
+        if (name == "disallow" || name == "禁止") {
+            val users = PluginGuard.allowedUsers()
+            if (users.isNotEmpty() && !users.contains(ev.userOpenId)) {
+                reply(bot, ev, "⛔ 你不在插件白名单里，无权操作。")
+                return true
+            }
+            val target = text.trim().split(Regex("\\s+")).getOrNull(1)
+            if (target == null) {
+                reply(bot, ev, "用法：/disallow <openid>")
+                return true
+            }
+            PluginGuard.removeUser(target)
+            reply(bot, ev, "已移除 $target。剩余 ${PluginGuard.allowedUsers().size} 人。")
+            return true
+        }
+
         val pc = PluginRegistry.find(name) ?: return false
+
+        // P6 安全层：白名单校验
+        val deny = PluginGuard.check(ev.scene, ev.userOpenId, ev.groupOpenId)
+        if (deny != null) {
+            PluginGuard.audit(ev.scene, ev.userOpenId, ev.groupOpenId, pc.command, false, deny)
+            reply(bot, ev, "⛔ $deny\n发送 /whoami 查看你的 openid")
+            return true
+        }
 
         if (!pc.allows(ev.scene)) {
             reply(bot, ev, "指令 /${pc.command} 不允许在${if (ev.scene == "group") "群聊" else "私聊"}中使用。")
@@ -335,6 +393,7 @@ object MessageHandler {
         // 参数：指令名之后的部分按空白切分
         val args = text.trim().split(Regex("\\s+")).drop(1)
         val r = PluginRunner.run(pc, args)
+        PluginGuard.audit(ev.scene, ev.userOpenId, ev.groupOpenId, pc.command, r.ok, r.output)
         val body = if (r.ok) r.output else "❌ ${r.output}"
         reply(bot, ev, body)
         return true
