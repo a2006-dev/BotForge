@@ -22,9 +22,13 @@ android {
     }
 
     // assets 里的 rootfs 已经是 gzip 压缩体，再压一次既浪费时间也增大体积，
-    // 并且会让运行时的流式解包变慢。这里对 .gz 关闭压缩。
+    // 并且会让运行时的流式解包变慢。
+    //
+    // 注意声明的是 'tar' 而不是 'gz'：源文件名为 alpine-rootfs.tar（内容为
+    // gzip 流）。若源文件保留 .gz 后缀，AAPT 会在打包时剥掉该后缀，
+    // 产物路径与源码路径不一致，运行时按常量 open 必然失败。
     androidResources {
-        noCompress 'gz'
+        noCompress 'tar'
     }
 
     // jniLibs 里的 proot 以 libbfproot.so 命名，需要随包释放且不被裁剪。

@@ -119,7 +119,9 @@ jobs:
       - name: Verify APK contents
         run: |
           set -u
-          APK=$(ls out/*.apk 2>/dev/null | head -1)
+          # 优先校验 release：装机走的是它，debug 只作兜底
+          APK=$(ls out/*release*.apk 2>/dev/null | head -1)
+          [ -n "$APK" ] || APK=$(ls out/*.apk 2>/dev/null | head -1)
           echo "APK: $APK"
           test -n "$APK" || { echo "::error::未产出 APK"; exit 1; }
 
@@ -140,9 +142,12 @@ jobs:
             fi
           }
 
+          # 注意 libtalloc 的实际文件名是 libtalloc.so：jniLibs 只收 lib*.so，
+          # proot 需要的 soname libtalloc.so.2 由应用首次启动时复制生成。
           check "proot 可执行文件"        apkx/lib/arm64-v8a/libbfproot.so
-          check "talloc 依赖"             apkx/lib/arm64-v8a/libtalloc.so.2
-          check "rootfs 压缩包"           apkx/assets/rootfs/alpine-rootfs.tar.gz
+          check "talloc 库"               apkx/lib/arm64-v8a/libtalloc.so
+          check "shmem 库"                apkx/lib/arm64-v8a/libandroid-shmem.so
+          check "rootfs 数据"             apkx/assets/rootfs/alpine-rootfs.tar
           check "classes.dex"             apkx/classes.dex
           check "资源表"                  apkx/resources.arsc
 
@@ -155,8 +160,8 @@ jobs:
           esac
 
           # rootfs 必须是有效 gzip，避免空文件或截断文件混入
-          if [ -e apkx/assets/rootfs/alpine-rootfs.tar.gz ]; then
-            gzip -t apkx/assets/rootfs/alpine-rootfs.tar.gz \
+          if [ -e apkx/assets/rootfs/alpine-rootfs.tar ]; then
+            gzip -t apkx/assets/rootfs/alpine-rootfs.tar \
               && echo "  ok   rootfs gzip 完整性" \
               || { echo "::error title=rootfs 损坏::gzip 校验失败"; fail=1; }
           fi

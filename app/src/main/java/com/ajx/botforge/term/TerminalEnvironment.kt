@@ -22,7 +22,11 @@ import java.util.zip.GZIPInputStream
  * ## rootfs 从哪来
  *
  * Alpine minirootfs 以 tar.gz 放在 assets/rootfs/，首次启动解包到
- * filesDir/rootfs。构建时已对 `.gz` 关闭压缩，因此运行时拿到的是原始 gzip 流。
+ * filesDir/rootfs。
+ *
+ * 文件在源码里就叫 `alpine-rootfs.tar`（内容是 gzip 流）：AAPT 对
+ * 声明为 noCompress 的 `.gz` 会在打包时剥掉后缀，若源码保留 `.gz`，
+ * 运行时按原路径 open 必然失败。让源码名与产物名一致可以免掉这层隐式转换。
  *
  * ## 为什么只绑定必要路径
  *
@@ -31,7 +35,7 @@ import java.util.zip.GZIPInputStream
  */
 object TerminalEnvironment {
 
-    const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar.gz"
+    const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar"
     private const val MARKER = ".bf_ready"
     private const val ROOTFS_VERSION = "alpine-3.19.0"
 
@@ -49,6 +53,43 @@ object TerminalEnvironment {
 
     fun libDir(context: Context): File = File(context.applicationInfo.nativeLibraryDir)
 
+    /**
+     * 运行期库目录。
+     *
+     * proot 的 DT_NEEDED 里写的是 `libtalloc.so.2`，但 Android 打包只接受
+     * `lib*.so` 形式的文件名，`.so.2` 会被 jniLibs 静默丢弃。这里在首次
+     * 启动时把 `libtalloc.so` 复制一份为 `libtalloc.so.2` 放到私有目录，
+     * 让动态链接器按 soname 找得到。
+     */
+    fun runLibDir(context: Context): File = File(context.filesDir, "lib").apply { mkdirs() }
+
+    /**
+     * 补齐运行库。可重复调用，目标文件已存在时立即返回。
+     *
+     * @return 所需运行库是否齐备
+     */
+    fun ensureRunLibs(context: Context): Boolean {
+        val src = libDir(context)
+        val dst = runLibDir(context)
+        // soname -> 包内实际文件名
+        val mapping = mapOf(
+            "libtalloc.so.2" to "libtalloc.so",
+            "libandroid-shmem.so" to "libandroid-shmem.so"
+        )
+        var ok = true
+        mapping.forEach { (soname, real) ->
+            val out = File(dst, soname)
+            if (out.exists() && out.length() > 0) return@forEach
+            val from = File(src, real)
+            if (!from.exists()) {
+                ok = false
+                return@forEach
+            }
+            runCatching { from.copyTo(out, overwrite = true) }.onFailure { ok = false }
+        }
+        return ok
+    }
+
     fun prootPath(context: Context): File = File(libDir(context), "libbfproot.so")
 
     fun rootfsDir(context: Context): File = File(context.filesDir, "rootfs")
@@ -58,7 +99,8 @@ object TerminalEnvironment {
     /** proot 本体与依赖是否随包存在。 */
     fun hasBinaries(context: Context): Boolean {
         val dir = libDir(context)
-        return File(dir, "libbfproot.so").exists() && File(dir, "libtalloc.so.2").exists()
+        // 包内只会有 libtalloc.so；libtalloc.so.2 由 ensureRunLibs 在首次启动时生成。
+        return File(dir, "libbfproot.so").exists() && File(dir, "libtalloc.so").exists()
     }
 
     fun isReady(context: Context): Boolean {
@@ -81,6 +123,10 @@ object TerminalEnvironment {
         return try {
             if (!hasBinaries(context)) {
                 state = State.Failed("原生组件缺失")
+                return false
+            }
+            if (!ensureRunLibs(context)) {
+                state = State.Failed("运行库准备失败")
                 return false
             }
             // 上次中断留下的半成品会与新解包混在一起，先清掉
@@ -206,7 +252,7 @@ object TerminalEnvironment {
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "PROOT_NO_SECCOMP=1",
             "PROOT_TMP_DIR=${tmp.absolutePath}",
-            "LD_LIBRARY_PATH=${lib.absolutePath}"
+            "LD_LIBRARY_PATH=${runLibDir(context).absolutePath}:${lib.absolutePath}"
         )
         argv += if (command != null) listOf("/bin/sh", "-lc", command) else listOf("/bin/sh", "-l")
         return argv
