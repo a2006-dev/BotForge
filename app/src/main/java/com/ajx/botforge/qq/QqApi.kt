@@ -98,8 +98,15 @@ object QqApi {
     fun sendGroup(bot: com.ajx.botforge.data.Config.Bot, groupOpenId: String, content: String): Boolean =
         sendGroup(sessionOf(bot), groupOpenId, content)
 
+    // 被动回复带 msgId + 递增 seq 的重载（F10 之后 reply() 使用）
+    fun sendGroup(bot: com.ajx.botforge.data.Config.Bot, groupOpenId: String, content: String, msgId: String?, seq: Int): Boolean =
+        sendGroup(sessionOf(bot), groupOpenId, content, msgId, seq)
+
     fun sendC2C(bot: com.ajx.botforge.data.Config.Bot, userOpenId: String, content: String): Boolean =
         sendC2C(sessionOf(bot), userOpenId, content)
+
+    fun sendC2C(bot: com.ajx.botforge.data.Config.Bot, userOpenId: String, content: String, msgId: String?, seq: Int): Boolean =
+        sendC2C(sessionOf(bot), userOpenId, content, msgId, seq)
 
     // ---------------------------------------------------------------- HTTP
     private fun httpGet(url: String, s: Session, timeoutMs: Int = 20000): String? =

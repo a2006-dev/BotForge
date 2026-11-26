@@ -18,6 +18,34 @@ object Config {
 
     fun init(ctx: Context) {
         sp = ctx.getSharedPreferences("botforge", Context.MODE_PRIVATE)
+        SecretStore.init(ctx)
+    }
+
+    // ------------------------------------------------------- 敏感字段读写
+    /**
+     * 读取敏感字段：优先从保险箱取；取不到且配置里是明文（旧版本遗留），
+     * 则顺手迁移进保险箱并把明文替换成占位符。
+     */
+    private fun readSecret(obj: JSONObject, jsonField: String, vaultKey: String): String {
+        val inVault = SecretStore.get(vaultKey)
+        if (inVault.isNotEmpty()) return inVault
+        val plain = obj.optString(jsonField)
+        if (plain.isEmpty() || plain == SecretStore.PLACEHOLDER) return ""
+        // 旧版本明文 → 迁移
+        SecretStore.put(vaultKey, plain)
+        Logger.i("Secret", "已迁移明文密钥到保险箱: $vaultKey")
+        return plain
+    }
+
+    /** 写入敏感字段：真值进保险箱，JSON 里只留占位符 */
+    private fun writeSecret(o: JSONObject, jsonField: String, vaultKey: String, value: String) {
+        if (value.isEmpty()) {
+            SecretStore.remove(vaultKey)
+            o.put(jsonField, "")
+        } else {
+            SecretStore.put(vaultKey, value)
+            o.put(jsonField, SecretStore.PLACEHOLDER)
+        }
     }
 
     // ---------------------------------------------------------------- Bot
@@ -80,7 +108,7 @@ object Config {
                         o.optString("id"),
                         o.optString("name"),
                         o.optString("appId"),
-                        o.optString("appSecret"),
+                        readSecret(o, "appSecret", SecretStore.botKey(o.optString("id"))),
                         o.optString("personaId"),
                         o.optString("modelId"),
                         o.optBoolean("enabled", true),
@@ -102,7 +130,7 @@ object Config {
             o.put("id", b.id)
             o.put("name", b.name)
             o.put("appId", b.appId)
-            o.put("appSecret", b.appSecret)
+            writeSecret(o, "appSecret", SecretStore.botKey(b.id), b.appSecret)
             o.put("personaId", b.personaId)
             o.put("modelId", b.modelId)
             o.put("enabled", b.enabled)
@@ -200,7 +228,7 @@ object Config {
                         o.optString("id"),
                         o.optString("name"),
                         o.optString("baseUrl"),
-                        o.optString("apiKey"),
+                        readSecret(o, "apiKey", SecretStore.modelKey(o.optString("id"))),
                         o.optString("model"),
                         o.optString("type", "openai"),
                         o.optInt("timeout", 120),
@@ -219,7 +247,8 @@ object Config {
         list.forEach { m ->
             val o = JSONObject()
             o.put("id", m.id); o.put("name", m.name); o.put("baseUrl", m.baseUrl)
-            o.put("apiKey", m.apiKey); o.put("model", m.model); o.put("type", m.type)
+            writeSecret(o, "apiKey", SecretStore.modelKey(m.id), m.apiKey)
+            o.put("model", m.model); o.put("type", m.type)
             o.put("timeout", m.timeout); o.put("maxTokens", m.maxTokens)
             arr.put(o)
         }
