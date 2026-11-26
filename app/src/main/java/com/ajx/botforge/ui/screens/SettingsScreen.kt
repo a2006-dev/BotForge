@@ -274,12 +274,12 @@ private fun TrackSwitch(checked: Boolean) {
             .size(width = 44.dp, height = 26.dp)
             .background(
                 if (checked) Brand else Bg4,
-                Radius.full
+                RoundedCornerShape(Radius.full)
             )
             .border(
                 Sizes.hairline,
                 if (checked) Brand else LineStrong,
-                Radius.full
+                RoundedCornerShape(Radius.full)
             ),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
     ) {

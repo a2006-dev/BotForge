@@ -172,7 +172,7 @@ fun SnackBar(
         modifier = modifier
             .fillMaxWidth()
             .background(tone.bg, RoundedCornerShape(Radius.md))
-            .border(Sizes.hairline, tone.fg.copy(alpha = 0.35f), Radius.md)
+            .border(Sizes.hairline, tone.fg.copy(alpha = 0.35f), RoundedCornerShape(Radius.md))
             .padding(horizontal = Spacing.md, vertical = Spacing.sm)
     ) {
         Text(

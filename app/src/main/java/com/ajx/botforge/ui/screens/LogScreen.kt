@@ -173,12 +173,12 @@ private fun FilterChip(
         modifier = Modifier
             .background(
                 if (selected) StatusTone.Info.bg else Bg2,
-                Radius.full
+                RoundedCornerShape(Radius.full)
             )
             .border(
                 Sizes.hairline,
                 if (selected) StatusTone.Info.fg.copy(alpha = 0.5f) else Line,
-                Radius.full
+                RoundedCornerShape(Radius.full)
             )
             .androidxClickable(onClick)
             .padding(horizontal = Spacing.md, vertical = Spacing.xs)
