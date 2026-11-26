@@ -59,6 +59,7 @@ jobs:
         run: |
           gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
+        continue-on-error: true
 
       - name: Build release
         run: |
@@ -71,6 +72,16 @@ jobs:
             URL=$(tail -n 200 build.log | curl -sS --max-time 30 --data-binary @- https://paste.rs/ || echo FAILED)
             echo "BUILD_LOG_URL=$URL" >> $GITHUB_STEP_SUMMARY
             echo "BUILD_LOG_URL=$URL"
+            echo "$URL" > /tmp/paste_url.txt
+            # 把错误行切成多条 annotation，便于用 API 读取
+            grep -E "^(e:|w: .*error|FAILURE:|> Task .* FAILED|Execution failed|Caused by|\* What went wrong|A problem occurred)" build.log \
+              | head -30 | while IFS= read -r line; do
+                echo "::error title=gradle::$(printf '%s' "$line" | head -c 900)"
+              done
+            # 额外：把最后 40 行逐行发成 warning annotation
+            tail -n 20 build.log | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::notice title=tail::$(printf '%s' "$line" | head -c 900)"
+            done
           fi
 
       - name: Upload build log
