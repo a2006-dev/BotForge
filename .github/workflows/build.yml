@@ -64,15 +64,13 @@ jobs:
         run: |
           gradle :app:assembleRelease --stacktrace --no-daemon 2>&1 | tee release.log || echo "release 失败，仅产出 debug"
 
-      - name: Report build log to issue
+      - name: Report build log to summary
         if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f build.log ]; then
-            ERR=$(tail -n 120 build.log)
-            printf '%s\n' "$ERR" > /tmp/err.txt
-            gh issue create --title "CI fail $(date +%s)" --body-file /tmp/err.txt || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Upload build log
