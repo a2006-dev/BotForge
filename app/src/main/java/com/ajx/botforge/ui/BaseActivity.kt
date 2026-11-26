@@ -161,10 +161,24 @@ abstract class BaseActivity : AppCompatActivity() {
 
     /** 把已有视图包进卡片（不改其内部结构） */
     protected fun cardWrap(v: View, top: Int = 0): View = card(v, top)
-
     // ------------------------------------------------------------ 工具
 
     protected fun color(id: Int): Int = ContextCompat.getColor(this, id)
+
+    /** 轻提示 */
+    protected fun toast(msg: String) {
+        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    /** 二次确认弹窗（走深色 Dialog 主题） */
+    protected fun confirm(msg: String, onOk: () -> Unit) {
+        androidx.appcompat.app.AlertDialog.Builder(this, R.style.Theme_BotForge_Dialog)
+            .setMessage(msg)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("确定") { _, _ -> onOk() }
+            .show()
+    }
+
 
     /** 从 dimen 资源取像素值，例如 dp(R.dimen.s4) */
     protected fun dp(id: Int): Int = resources.getDimensionPixelSize(id)

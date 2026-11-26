@@ -127,9 +127,9 @@ class MainActivity : AppCompatActivity() {
                 orientation = LinearLayout.HORIZONTAL
                 layoutParams = matchWrap(top = dp(R.dimen.s3))
 
-                labelBots = metric(this@MainActivity, addView, "机器人")
-                labelPersonas = metric(this@MainActivity, addView, "人设")
-                labelModels = metric(this@MainActivity, addView, "模型")
+                labelBots = metric(this@MainActivity, { v, lp -> addView(v, lp) }, "机器人")
+                labelPersonas = metric(this@MainActivity, { v, lp -> addView(v, lp) }, "人设")
+                labelModels = metric(this@MainActivity, { v, lp -> addView(v, lp) }, "模型")
             })
 
             // 调度状态单独一行（可能较长）
