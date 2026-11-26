@@ -34,6 +34,9 @@ import com.ajx.botforge.permission.PermissionGuide
 import com.ajx.botforge.qq.BotConnState
 import com.ajx.botforge.qq.BotConnectionState
 import com.ajx.botforge.ui.components.AppCard
+import com.ajx.botforge.ui.components.HeroMetric
+import com.ajx.botforge.ui.components.StatusHero
+import com.ajx.botforge.ui.components.rememberReducedMotion
 import com.ajx.botforge.ui.components.ListRow
 import com.ajx.botforge.ui.components.PrimaryButton
 import com.ajx.botforge.ui.components.RowDivider
@@ -94,6 +97,10 @@ fun DashboardScreen(
 
     var toast by remember { mutableStateOf<String?>(null) }
     var permStatus by remember { mutableStateOf<PermissionGuide.Status?>(null) }
+
+    // 系统是否要求「移除动画」（无障碍设置 / 开发者选项里的动画缩放 0）
+    // 尊重该设置是做动画组件的基本要求，否则前庭功能障碍用户会不适。
+    val reduceMotion = rememberReducedMotion()
 
     LaunchedEffect(Unit) {
         DashboardStore.install()
@@ -178,37 +185,32 @@ fun DashboardScreen(
                     .fillMaxWidth()
                     .padding(horizontal = Spacing.md)
             ) {
-                // ---------- 服务状态 + 主操作 ----------
+                // ---------- StatusHero + 主操作 ----------
+                // 设计意图（见《03-关键页面线框》§1）：状态本身就是首页最重要的信息，
+                // 不再套进卡片、不再写三遍「未启动」。StatusHero 负责说清
+                // 「现在是什么状态 + 意味着什么 + 关键数字」，按钮只负责动作。
                 Spacer(Modifier.height(Spacing.md))
-                AppCard {
-                    StatusIndicator(
-                        text = if (state.serviceRunning) "前台服务运行中" else "前台服务已停止",
-                        tone = if (state.serviceRunning) StatusTone.Success else StatusTone.Neutral
+                StatusHero(
+                    status = state.status,
+                    metrics = heroMetrics(state),
+                    reduceMotion = reduceMotion,
+                    modifier = Modifier.padding(horizontal = Spacing.sm)
+                )
+
+                Spacer(Modifier.height(Spacing.xl))
+
+                if (state.serviceRunning) {
+                    SecondaryButton(
+                        text = "停止服务",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { toggle() }
                     )
-                    Spacer(Modifier.height(Spacing.xs))
-                    Text(
-                        text = if (state.serviceRunning) {
-                            "退出界面不会断开；熄屏后依赖保活配置"
-                        } else {
-                            "启动后建立 QQ 网关长连接"
-                        },
-                        color = TextLow,
-                        fontSize = FontSize.micro
+                } else {
+                    PrimaryButton(
+                        text = "启动服务",
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { toggle() }
                     )
-                    Spacer(Modifier.height(Spacing.md))
-                    if (state.serviceRunning) {
-                        SecondaryButton(
-                            text = "停止服务",
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { toggle() }
-                        )
-                    } else {
-                        PrimaryButton(
-                            text = "启动服务",
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = { toggle() }
-                        )
-                    }
                 }
 
                 // 权限未补齐提示（有缺才显示）
@@ -371,17 +373,59 @@ fun DashboardScreen(
 
 // ---------------------------------------------------------------- 子组件
 
-/** 品牌区副标题：一句话说清当前阶段，全部基于真实计数 */
+/**
+ * 品牌区副标题：一句话说清当前阶段，全部基于真实计数
+ *
+ * 注意：这里不再输出「前台服务未启动」。那句话属于状态区（StatusHero）的职责，
+ * 两处都写会让用户在首屏连读三遍「没启动」，是纯噪音。
+ * 未启动时品牌区改为说明产品价值，把「没在跑」的判断交给 StatusHero。
+ */
 private fun summaryLine(
     serviceRunning: Boolean,
     loaded: Int,
     online: Int,
     hasAny: Boolean
 ): String {
-    if (!serviceRunning) return "前台服务未启动"
+    if (!serviceRunning) return "本地运行的 QQ 机器人管理中心"
     if (loaded == 0) return "服务运行中 · 暂无启用机器人"
     if (!hasAny) return "服务运行中 · 等待连接"
     return "服务运行中 · $online/$loaded 在线"
+}
+
+/**
+ * StatusHero 的三列指标（提示词 §6.1：运行时长 / 最近消息时间 / 断线次数）
+ *
+ * 未运行时给「上次运行」「日志总数」这类静态存量，而不是硬塞 0，
+ * 因为未启动时「0 次断线」没有信息量。
+ */
+private fun heroMetrics(state: com.ajx.botforge.ui.data.DashboardState): List<HeroMetric> {
+    val last = state.lastEventTime
+    return if (state.serviceRunning) {
+        listOf(
+            HeroMetric("运行时长", uptimeText(state.uptimeMillis)),
+            HeroMetric("最近事件", last ?: "—"),
+            HeroMetric("断线次数", "${state.totalReconnects} 次")
+        )
+    } else {
+        listOf(
+            HeroMetric("最近事件", last ?: "无"),
+            HeroMetric("日志总数", "${state.logTotal} 条")
+        )
+    }
+}
+
+/** 毫秒 → 「3 小时 12 分」/「12 分 30 秒」/「45 秒」 */
+private fun uptimeText(ms: Long): String {
+    if (ms <= 0L) return "—"
+    val totalSec = ms / 1000
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return when {
+        h > 0 -> "$h 小时 $m 分"
+        m > 0 -> "$m 分 $s 秒"
+        else -> "$s 秒"
+    }
 }
 
 private fun toneOf(state: BotConnState): Pair<StatusTone, String> = when (state) {

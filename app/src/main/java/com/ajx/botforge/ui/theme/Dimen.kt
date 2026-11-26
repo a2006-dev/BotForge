@@ -81,6 +81,19 @@ object FontSize {
     val metric = 40.sp
 }
 
+/**
+ * 数字样式（设计规范 §2 / 提示词 §4.2）
+ *
+ * 所有会跳动或对齐的数值（运行时长、计数、耗时、心跳间隔）
+ * 必须使用等宽数字，否则秒数跳动时会左右抖动，视觉上毛毛糙糙。
+ * 用法：Text(style = ... , fontFeatureSettings = NumericStyle.tnum)
+ *  或直接用 Modifier + 下文的 TextStyle 扩展。
+ */
+object NumericStyle {
+    /** 等宽数字，用于所有动态更新的数值 */
+    const val tnum = "tnum"
+}
+
 object LineHeight {
     val tight = 18.sp
     val normal = 20.sp

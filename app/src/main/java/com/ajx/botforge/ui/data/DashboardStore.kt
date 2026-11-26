@@ -3,6 +3,8 @@ package com.ajx.botforge.ui.data
 import com.ajx.botforge.data.Logger
 import com.ajx.botforge.qq.BotConnectionState
 import com.ajx.botforge.qq.BotManager
+import com.ajx.botforge.ui.components.BotStatus
+import com.ajx.botforge.ui.components.resolveBotStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +56,50 @@ data class DashboardState(
     /** 错误级事件（用于首页"运行异常"区块） */
     val errorEvents: List<Logger.Line>
         get() = events.filter { it.level >= 2 }.take(3)
+
+    /**
+     * 当前应呈现的语义状态（首页 StatusHero 的唯一数据来源）
+     *
+     * 判定优先级见 resolveBotStatus：服务没跑就是「暂停/离线」，
+     * 不管残留的连接快照怎么说。这是修掉「服务已停但首页显示在线」的关键。
+     */
+    val status: BotStatus
+        get() {
+            val main = bots.maxByOrNull { it.connectedAt }
+            return resolveBotStatus(
+                running = serviceRunning,
+                connected = main?.state == com.ajx.botforge.qq.BotConnState.CONNECTED,
+                userStopped = com.ajx.botforge.data.Config.userStopped,
+                generation = (main?.generation ?: 0L).toInt(),
+                failCount = summary.error
+            )
+        }
+
+    /**
+     * 已运行的毫秒数；未运行时为 0。
+     *
+     * 取所有机器人里最早建立的连接时间：多个机器人时，
+     * 用户关心的是「服务开了多久」，而不是某一个 bot 的单独时长。
+     */
+    val uptimeMillis: Long
+        get() {
+            if (!serviceRunning) return 0L
+            val started = bots.map { it.connectedAt }.filter { it > 0L }.minOrNull() ?: return 0L
+            return (System.currentTimeMillis() - started).coerceAtLeast(0L)
+        }
+
+    /** 今日断线总次数（按 reconnectCount 汇总，是累计值不是当日值，文案上不写"今日"） */
+    val totalReconnects: Int
+        get() = bots.sumOf { it.reconnectCount }
+
+    /**
+     * 最近一次事件的时间文本（"HH:mm:ss"）；无事件时为 null。
+     *
+     * 注意 Logger.Line.time 是已格式化的字符串，不是时间戳。
+     * 首页直接展示这个字符串，不再做二次格式化，避免时区/格式二次转换出错。
+     */
+    val lastEventTime: String?
+        get() = events.firstOrNull()?.time
 }
 
 /**
