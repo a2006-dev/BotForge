@@ -40,6 +40,12 @@ android {
         }
         debug {
             minifyEnabled false
+            // CI 的 debug 包默认用 runner 随机生成的 debug keystore，导致每次构建
+            // 签名都不同、永远装不上去。若有 keystore.properties，debug 也统一用
+            // 这个固定 keystore 签名，保证可以覆盖安装。
+            if (rootProject.file('keystore.properties').exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
