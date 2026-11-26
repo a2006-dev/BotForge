@@ -1,49 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-
     <!--
-        主题 · v2
-        v1 的问题：只改了窗口底色，系统控件（Button/Switch/EditText/Dialog）
-        仍按浅色分支绘制，导致白底白字、灰块按钮。
-        v2 用 Theme.AppCompat.NoActionBar（Dark 分支），并把所有会露白的地方
-        逐个显式指定。
+        主题 · v3
+        v2 之前用 Theme.AppCompat.NoActionBar，是为了让系统控件（Button/Switch/
+        EditText/Dialog）走深色分支。但 v3 起所有界面已迁移到 Compose，
+        项目里不再有 AppCompat Activity，继续依赖 AppCompat 主题只是背着一个
+        多余的运行时依赖，还会让 Activity 被迫继承 AppCompatActivity。
+
+        这里改用平台原生主题 android:Theme.Material.NoActionBar（API 21+，
+        minSdk 26 完全覆盖），同样具备完整的深色控件分支，不再需要 appcompat。
     -->
-    <style name="Theme.BotForge" parent="Theme.AppCompat.NoActionBar">
-
+    <style name="Theme.BotForge" parent="android:Theme.Material.NoActionBar">
         <!-- 品牌 -->
-        <item name="colorPrimary">@color/brand</item>
-        <item name="colorPrimaryDark">@color/ink_0</item>
-        <item name="colorAccent">@color/brand</item>
-        <item name="colorControlActivated">@color/brand</item>
-        <item name="colorControlNormal">@color/t_mid</item>
-        <item name="colorControlHighlight">@color/ink_4</item>
-
+        <item name="android:colorPrimary">@color/brand</item>
+        <item name="android:colorPrimaryDark">@color/ink_0</item>
+        <item name="android:colorAccent">@color/brand</item>
         <!-- 窗口与系统栏 -->
         <item name="android:colorBackground">@color/ink_1</item>
         <item name="android:windowBackground">@color/ink_1</item>
-        <item name="android:statusBarColor">@color/ink_0</item>
-        <item name="android:navigationBarColor">@color/ink_0</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
-
-        <!-- 弹窗 / 菜单 -->
-        <item name="android:colorBackgroundFloating">@color/ink_2</item>
+        <!-- 文字 -->
         <item name="android:textColorPrimary">@color/t_hi</item>
         <item name="android:textColorSecondary">@color/t_mid</item>
         <item name="android:textColorHint">@color/t_low</item>
-        <item name="android:textColorPrimaryInverse">@color/t_inverse</item>
-
+        <item name="android:colorBackgroundFloating">@color/ink_2</item>
         <!-- 分割线 -->
         <item name="android:listDivider">@color/line</item>
     </style>
 
-    <!-- AlertDialog 专用主题：确保弹窗底与文字都是深色方案 -->
-    <style name="Theme.BotForge.Dialog" parent="Theme.AppCompat.Dialog.Alert">
-        <item name="colorAccent">@color/brand</item>
-        <item name="android:colorBackground">@color/ink_2</item>
-        <item name="android:textColorPrimary">@color/t_hi</item>
-        <item name="android:textColorSecondary">@color/t_mid</item>
+    <!--
+        启动页主题：Compose 首帧前避免白屏。
+        只保留窗口底色，不设置任何控件分支。
+    -->
+    <style name="Theme.BotForge.Splash" parent="Theme.BotForge">
+        <item name="android:windowBackground">@color/ink_1</item>
     </style>
+
     <!-- 兼容别名：其它页面可能引用了旧名字（注意不能与 colors.xml 重名） -->
     <color name="bg">@color/ink_1</color>
     <color name="card">@color/ink_2</color>
@@ -52,6 +47,4 @@
     <color name="text_sub">@color/t_mid</color>
     <color name="ok">@color/run</color>
     <color name="err">@color/danger</color>
-
-
 </resources>

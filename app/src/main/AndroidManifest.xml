@@ -31,16 +31,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- 配置页已全部迁移到 Compose（ui/screens），旧的 8 个 AppCompat Activity 已删除 -->
 
-        <!-- 配置页 -->
-        <activity android:name=".ui.BotListActivity" android:exported="false" />
-        <activity android:name=".ui.BotEditActivity" android:exported="false" />
-        <activity android:name=".ui.GroupListActivity" android:exported="false" />
-        <activity android:name=".ui.PersonaListActivity" android:exported="false" />
-        <activity android:name=".ui.PersonaEditActivity" android:exported="false" />
-        <activity android:name=".ui.ModelListActivity" android:exported="false" />
-        <activity android:name=".ui.ModelEditActivity" android:exported="false" />
-        <activity android:name=".ui.LogActivity" android:exported="false" />
 
         <!-- 主服务：前台常驻，保活核心 -->
         <service
