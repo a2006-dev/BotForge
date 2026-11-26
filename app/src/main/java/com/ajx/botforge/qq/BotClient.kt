@@ -221,6 +221,10 @@ class BotClient(
                     "GROUP_AT_MESSAGE_CREATE",
                     "GROUP_MESSAGE_CREATE" -> onGroupMessage(obj)
                     "C2C_MESSAGE_CREATE" -> onC2cMessage(obj)
+                    "GROUP_ADD_ROBOT" -> onGroupAdd(obj, "机器人被拉入群")
+                    "GROUP_DEL_ROBOT" -> onGroupAdd(obj, "机器人被移出群")
+                    "FRIEND_ADD" -> onFriendAdd(obj)
+                    "FRIEND_DEL" -> Logger.i("Bot", "好友删除：${obj.optJSONObject("d")?.optString("openid") ?: "?"}")
                     else -> if (t.isNotEmpty()) Logger.i("Bot", "事件 $t（未处理）")
                 }
             }
@@ -256,6 +260,20 @@ class BotClient(
         runCatching { handler(ev) }.onFailure {
             Logger.e("Bot", "处理异常: ${it.message}")
         }
+    }
+
+    private fun onGroupAdd(obj: JSONObject, action: String) {
+        val d = obj.optJSONObject("d") ?: return
+        val gid = d.optString("group_openid").ifEmpty { d.optString("op_member_openid") }
+        Logger.i("Bot", "★ $action：group_openid = $gid")
+        if (gid.isNotEmpty()) reportStatus("$action，群 openid: $gid")
+    }
+
+    private fun onFriendAdd(obj: JSONObject) {
+        val d = obj.optJSONObject("d") ?: return
+        val oid = d.optString("openid").ifEmpty { d.optString("user_openid") }
+        Logger.i("Bot", "★ 有新好友添加机器人：openid = $oid")
+        if (oid.isNotEmpty()) reportStatus("新好友：$oid")
     }
 
     private fun onC2cMessage(obj: JSONObject) {
