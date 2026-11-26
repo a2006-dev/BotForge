@@ -64,6 +64,7 @@ fun SettingsScreen(
 ) {
     var autoStart by remember { mutableStateOf(true) }
     var keepAlive by remember { mutableStateOf(true) }
+    var autoRestart by remember { mutableStateOf(true) }
     var searchEnabled by remember { mutableStateOf(true) }
     var agentEnabled by remember { mutableStateOf(false) }
     var logEnabled by remember { mutableStateOf(true) }
@@ -72,6 +73,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         autoStart = Config.autoStart
         keepAlive = Config.keepAlive
+        autoRestart = Config.autoRestart
         searchEnabled = Config.searchEnabled
         agentEnabled = Config.agentEnabled
         logEnabled = Config.logEnabled
@@ -110,6 +112,22 @@ fun SettingsScreen(
                 ) { v ->
                     keepAlive = v
                     Config.keepAlive = v
+                }
+                SettingDivider()
+                SwitchRow(
+                    title = "自动拉起服务",
+                    desc = if (autoRestart)
+                        "服务停止后会被自动重新启动（含划掉任务、被系统回收）"
+                    else
+                        "已关闭：服务停止后保持停止，只有手动点「启动服务」才会运行",
+                    checked = autoRestart
+                ) { v ->
+                    autoRestart = v
+                    Config.autoRestart = v
+                    if (v) {
+                        // 重新开启时清掉「主动停止」标记，否则开关看似打开却仍不拉活
+                        Config.userStopped = false
+                    }
                 }
                 SettingDivider()
                 SwitchRow(

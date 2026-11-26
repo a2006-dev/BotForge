@@ -59,7 +59,8 @@ class GuardService : Service() {
         handler.removeCallbacks(tick)
         Logger.w("Guard", "守护服务销毁")
         // 自己也尝试被拉起
-        if (Config.keepAlive) {
+        // 同样要尊重「自动拉起」开关与用户的主动停止意图
+        if (Config.keepAlive && Config.canAutoRestart()) {
             BotService.scheduleRestart(applicationContext, 3000L)
         }
         super.onDestroy()

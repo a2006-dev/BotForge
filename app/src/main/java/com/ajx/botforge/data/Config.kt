@@ -294,6 +294,44 @@ object Config {
         get() = sp.getBoolean("keep_alive", true)
         set(v) = sp.edit().putBoolean("keep_alive", v).apply()
 
+    /**
+     * 自动拉起总开关（用户可见）。
+     *
+     * 关掉之后，服务一旦停止就不再有任何自动拉起的动作：
+     *   - 被系统回收不拉起
+     *   - 任务被划掉不拉起
+     *   - 守护服务不互拉
+     *   - 打开 App 也不自动启动
+     * 只有用户手动点「启动服务」才会运行。
+     *
+     * 旧实现没有这个开关，且 onDestroy / onTaskRemoved / RestartReceiver /
+     * GuardService 四条路径都是无条件拉起，所以「停止服务」按钮点下去
+     * 2 秒内就被拉回来，看起来像停不掉。
+     */
+    var autoRestart: Boolean
+        get() = sp.getBoolean("auto_restart", true)
+        set(v) = sp.edit().putBoolean("auto_restart", v).apply()
+
+    /**
+     * 用户是否主动停止过服务。
+     *
+     * 和 [autoRestart] 的区别：这个是「一次性意图」，
+     * 用户点了停止就置 true，防止当前这一轮被拉起；
+     * 用户下次手动启动时清除。
+     * 它保证「用户点停止」永远立即生效，不受开关状态影响。
+     */
+    var userStopped: Boolean
+        get() = sp.getBoolean("user_stopped", false)
+        set(v) = sp.edit().putBoolean("user_stopped", v).apply()
+
+    /**
+     * 是否允许自动拉起服务。
+     *
+     * 所有保活路径统一走这个判断，避免各处各写一套条件。
+     * 两个条件都要满足：总开关开着，且用户没有主动停止。
+     */
+    fun canAutoRestart(): Boolean = autoRestart && !userStopped
+
     var searchEnabled: Boolean
         get() = sp.getBoolean("search_enabled", true)
         set(v) = sp.edit().putBoolean("search_enabled", v).apply()

@@ -45,7 +45,10 @@ class BotService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                Logger.i("Service", "收到停止指令")
+                Logger.i("Service", "收到停止指令（用户主动停止）")
+                // 先落用户意图，onDestroy 会读它决定要不要拉起
+                Config.userStopped = true
+                BotService.cancelScheduledRestart(applicationContext)
                 BotManager.stop()
                 stopSelfSafely()
                 return START_NOT_STICKY
@@ -53,6 +56,14 @@ class BotService : Service() {
             ACTION_RESTART_BOTS -> {
                 Logger.i("Service", "重新加载配置")
                 BotManager.reload(applicationContext)
+            }
+            else -> {
+                // 不是停止指令，视为「要它运行」，清掉上一轮的主动停止标记。
+                // 不清的话，用户上次点过停止后，保活链会一直拒绝拉起。
+                if (Config.userStopped) {
+                    Logger.i("Service", "启动服务，清除主动停止标记")
+                    Config.userStopped = false
+                }
             }
         }
         // 服务被系统杀掉后自动重建
@@ -62,8 +73,12 @@ class BotService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Logger.w("Service", "任务被移除，调度重启")
-        scheduleRestart(applicationContext, 1000L)
+        if (Config.canAutoRestart()) {
+            Logger.w("Service", "任务被移除，调度重启")
+            scheduleRestart(applicationContext, 1000L)
+        } else {
+            Logger.i("Service", "任务被移除，自动拉起已关闭，不重启")
+        }
         super.onTaskRemoved(rootIntent)
     }
 
@@ -71,16 +86,19 @@ class BotService : Service() {
         running = false
         Logger.w("Service", "前台服务销毁")
         KeepAliveOverlay.release()
-        // 若用户没主动停止，尽量拉起
-        if (Config.keepAlive) {
+        // 只有「允许自动拉起」且「用户没主动停止」时才重启，
+        // 否则点一次停止就会被自己拉回来，停止按钮形同虚设。
+        if (Config.canAutoRestart()) {
             scheduleRestart(applicationContext, 2000L)
+        } else {
+            Logger.i("Service", "自动拉起已关闭，不再重启")
         }
         if (instance === this) instance = null
         super.onDestroy()
     }
 
     private fun startGuard() {
-        if (!Config.keepAlive) return
+        if (!Config.keepAlive || !Config.canAutoRestart()) return
         runCatching {
             val i = Intent(this, GuardService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -149,7 +167,28 @@ class BotService : Service() {
             ctx.startService(Intent(ctx, BotService::class.java).apply { action = ACTION_STOP })
         }
 
+        /** 取消已排程的重启。用户主动停止时必须调用，否则残留的 Alarm 还是会拉起服务 */
+        fun cancelScheduledRestart(ctx: Context) {
+            runCatching {
+                val i = Intent(ctx, RestartReceiver::class.java)
+                val pi = PendingIntent.getBroadcast(
+                    ctx, 42, i,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val am = ctx.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                am.cancel(pi)
+                pi.cancel()
+                Logger.i("Service", "已取消排程的重启")
+            }.onFailure { Logger.w("Service", "取消排程失败: ${it.message}") }
+        }
+
         fun scheduleRestart(ctx: Context, delayMs: Long) {
+            // 统一入口再兜一层：不允许自动拉起时直接不排程，
+            // 避免任何调用方漏判导致违背用户意图。
+            if (!Config.canAutoRestart()) {
+                Logger.i("Service", "自动拉起已关闭，跳过排程")
+                return
+            }
             val i = Intent(ctx, RestartReceiver::class.java)
             val pi = PendingIntent.getBroadcast(
                 ctx, 42, i,
