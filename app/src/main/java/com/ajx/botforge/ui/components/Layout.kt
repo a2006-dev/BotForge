@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -176,8 +177,8 @@ fun RowGroup(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(Bg2, Radius.lg)
-            .border(Sizes.hairline, Line, Radius.lg)
+            .background(Bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             content()

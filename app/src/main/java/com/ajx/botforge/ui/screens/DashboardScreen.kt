@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,7 +63,6 @@ fun DashboardScreen(
     val botState by botVm.state.collectAsStateWithLifecycle()
 
     val repo = remember { BotForgeRepository() }
-    val scope = rememberCoroutineScope()
     var personaCount by remember { mutableStateOf(0) }
     var modelCount by remember { mutableStateOf(0) }
     var logCount by remember { mutableStateOf(0) }
@@ -181,7 +181,7 @@ private fun StatTile(
 ) {
     Column(
         modifier = modifier
-            .background(Bg2, com.ajx.botforge.ui.theme.Radius.lg)
+            .background(Bg2, RoundedCornerShape(com.ajx.botforge.ui.theme.Radius.lg))
             .padding(Spacing.md)
     ) {
         Text(text = label, color = TextLow, fontSize = FontSize.caption)
@@ -201,7 +201,7 @@ private fun EntryRow(title: String, subtitle: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Bg2, com.ajx.botforge.ui.theme.Radius.md)
+            .background(Bg2, RoundedCornerShape(com.ajx.botforge.ui.theme.Radius.md))
             .androidxClickable(onClick = onClick)
             .padding(horizontal = Spacing.md, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically

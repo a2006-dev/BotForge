@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -105,8 +106,8 @@ fun LogScreen(onBack: () -> Unit) {
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.md)
-                .background(Bg2, Radius.md)
-                .border(Sizes.hairline, Line, Radius.md)
+                .background(Bg2, RoundedCornerShape(Radius.md))
+                .border(Sizes.hairline, Line, RoundedCornerShape(Radius.md))
         ) {
             if (state.shown.isEmpty()) {
                 EmptyState(
@@ -141,7 +142,7 @@ private fun LogLineRow(line: Logger.Line) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Bg3, Radius.xs)
+            .background(Bg3, RoundedCornerShape(Radius.xs))
             .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
         verticalAlignment = Alignment.Top
     ) {

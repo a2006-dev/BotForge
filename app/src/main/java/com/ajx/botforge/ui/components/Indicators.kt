@@ -49,20 +49,23 @@ enum class StatusTone(
     val fg: Color,
     val bg: Color
 ) {
+    // 注意：这里的颜色常量必须写全限定名。
+    // 枚举项与外层颜色常量同名（Success 等），直接写 Success 会被解析成枚举项自身，
+    // 导致 "inferred type is StatusTone but Color was expected"。
     /** 运行中 / 已连接 / 已启用 */
-    Success(Success, SuccessGhost),
+    Success(com.ajx.botforge.ui.theme.Success, com.ajx.botforge.ui.theme.SuccessGhost),
 
     /** 警告 / 待配置 / 部分运行 */
-    Warning(Warning, WarningGhost),
+    Warning(com.ajx.botforge.ui.theme.Warning, com.ajx.botforge.ui.theme.WarningGhost),
 
     /** 错误 / 断开 / 危险 */
-    Danger(Danger, DangerGhost),
+    Danger(com.ajx.botforge.ui.theme.Danger, com.ajx.botforge.ui.theme.DangerGhost),
 
     /** 空闲 / 未启用 / 未知 */
-    Neutral(Neutral, NeutralGhost),
+    Neutral(com.ajx.botforge.ui.theme.Neutral, com.ajx.botforge.ui.theme.NeutralGhost),
 
     /** 信息 / 处理中 */
-    Info(Info, InfoGhost)
+    Info(com.ajx.botforge.ui.theme.Info, com.ajx.botforge.ui.theme.InfoGhost)
 }
 
 /**

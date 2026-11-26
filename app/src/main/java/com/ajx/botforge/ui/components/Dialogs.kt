@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -46,8 +47,8 @@ fun BotDialog(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .background(Bg2, Radius.xl)
-                .border(Sizes.hairline, Line, Radius.xl)
+                .background(Bg2, RoundedCornerShape(Radius.xl))
+                .border(Sizes.hairline, Line, RoundedCornerShape(Radius.xl))
                 .padding(Spacing.lg)
         ) {
             if (title != null) {
@@ -170,7 +171,7 @@ fun SnackBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(tone.bg, Radius.md)
+            .background(tone.bg, RoundedCornerShape(Radius.md))
             .border(Sizes.hairline, tone.fg.copy(alpha = 0.35f), Radius.md)
             .padding(horizontal = Spacing.md, vertical = Spacing.sm)
     ) {
