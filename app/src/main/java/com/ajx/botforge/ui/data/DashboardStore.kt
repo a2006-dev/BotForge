@@ -89,7 +89,8 @@ object DashboardStore {
         // 首页的「最近运行事件」是真正的推送，而不是最多滞后 3 秒的快照。
         Logger.listener = { line -> onLogLine(line) }
         refreshBots()
-        refreshStatic()
+        // 静态数据由页面的 LaunchedEffect 调用 refreshStatic() 初始化，
+        // 这里不重复读一次（Repository 是 suspend，install 本身不是协程）。
     }
 
     fun uninstall() {
@@ -112,8 +113,13 @@ object DashboardStore {
         )
     }
 
-    /** 刷新与日志无关的静态数据（服务存活、配置数量）。启动时调用一次即可。 */
-    fun refreshStatic() {
+    /**
+     * 刷新与日志无关的静态数据（服务存活、配置数量）。
+     *
+     * Repository 的读取接口都是 suspend（内部走 IO 调度），
+     * 所以这里也必须是 suspend，只能在协程里调用。
+     */
+    suspend fun refreshStatic() {
         val cur = _state.value
         _state.value = cur.copy(
             serviceRunning = repo.isServiceRunning(),
