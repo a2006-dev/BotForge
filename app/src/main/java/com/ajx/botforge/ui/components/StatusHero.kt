@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -118,8 +119,12 @@ fun StatusHero(
                             fontSize = FontSize.bodyLarge,
                             lineHeight = LineHeight.normal,
                             fontWeight = FontWeight.SemiBold,
-                            // 数字等宽：秒数跳动时不会左右抖
-                            fontFeatureSettings = NumericStyle.tnum,
+                            // 数字等宽：秒数跳动时不会左右抖。
+                            // 注意 Material3 的 Text() 没有 fontFeatureSettings 参数，
+                            // 该属性只能挂在 TextStyle 上，因此这里必须走 style。
+                            style = LocalTextStyle.current.copy(
+                                fontFeatureSettings = NumericStyle.tnum
+                            ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )

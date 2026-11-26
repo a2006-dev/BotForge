@@ -86,7 +86,8 @@ object FontSize {
  *
  * 所有会跳动或对齐的数值（运行时长、计数、耗时、心跳间隔）
  * 必须使用等宽数字，否则秒数跳动时会左右抖动，视觉上毛毛糙糙。
- * 用法：Text(style = ... , fontFeatureSettings = NumericStyle.tnum)
+ * 用法：Text(..., style = LocalTextStyle.current.copy(fontFeatureSettings = NumericStyle.tnum))
+ * 注意 Material3 的 Text() 没有 fontFeatureSettings 参数，只能通过 style 传入。
  *  或直接用 Modifier + 下文的 TextStyle 扩展。
  */
 object NumericStyle {
