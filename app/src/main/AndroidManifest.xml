@@ -53,6 +53,7 @@
         <service
             android:name=".service.GuardService"
             android:exported="false"
+            android:foregroundServiceType="dataSync"
             android:process=":guard" />
 
         <!-- 开机自启 -->

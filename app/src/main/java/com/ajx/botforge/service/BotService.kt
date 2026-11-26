@@ -27,7 +27,15 @@ class BotService : Service() {
         super.onCreate()
         running = true
         instance = this
-        startForeground(NOTI_ID, buildNotification("正在启动…"))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTI_ID,
+                buildNotification("正在启动…"),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(NOTI_ID, buildNotification("正在启动…"))
+        }
         Logger.i("Service", "前台服务已创建")
         if (Config.keepAlive) KeepAliveOverlay.acquire(applicationContext)
         startGuard()

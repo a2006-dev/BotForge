@@ -35,7 +35,15 @@ class GuardService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(GUARD_NOTI_ID, buildGuardNotification())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                GUARD_NOTI_ID,
+                buildGuardNotification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(GUARD_NOTI_ID, buildGuardNotification())
+        }
         checking = true
         handler.postDelayed(tick, INTERVAL)
         Logger.i("Guard", "守护服务已启动（进程 :guard）")
