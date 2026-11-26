@@ -59,7 +59,6 @@ jobs:
         run: |
           gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
-        continue-on-error: true
 
       - name: Build release
         run: |
@@ -87,8 +86,16 @@ jobs:
       - name: Collect APKs
         run: |
           mkdir -p out
-          find app/build/outputs/apk -name "*.apk" -exec cp {} out/ \;
-          ls -lh out
+          if [ -d app/build/outputs/apk ]; then
+            find app/build/outputs/apk -name "*.apk" -exec cp {} out/ \; || true
+          fi
+          echo "--- collected ---"
+          ls -lh out || true
+          if [ -z "$(ls -A out 2>/dev/null)" ]; then
+            echo "no apk produced, listing build dirs"
+            ls -R app/build/outputs 2>/dev/null | head -50 || true
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
