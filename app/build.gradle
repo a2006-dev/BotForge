@@ -21,7 +21,7 @@ android {
             def ksFile = rootProject.file('keystore.properties')
             if (ksFile.exists()) {
                 ksProps.load(new FileInputStream(ksFile))
-                storeFile file(ksProps['storeFile'])
+                storeFile rootProject.file(ksProps['storeFile'])
                 storePassword ksProps['storePassword']
                 keyAlias ksProps['keyAlias']
                 keyPassword ksProps['keyPassword']
