@@ -7,12 +7,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.ajx.botforge.ui.screens.AboutScreen
+import com.ajx.botforge.ui.screens.BotEditScreen
 import com.ajx.botforge.ui.screens.BotListScreen
 import com.ajx.botforge.ui.screens.DashboardScreen
+import com.ajx.botforge.ui.screens.GroupListScreen
 import com.ajx.botforge.ui.screens.LogScreen
+import com.ajx.botforge.ui.screens.ModelEditScreen
 import com.ajx.botforge.ui.screens.ModelListScreen
+import com.ajx.botforge.ui.screens.PersonaEditScreen
 import com.ajx.botforge.ui.screens.PersonaListScreen
-import com.ajx.botforge.ui.screens.PlaceholderScreen
+import com.ajx.botforge.ui.screens.PluginScreen
 import com.ajx.botforge.ui.screens.SettingsScreen
 
 @Composable
@@ -55,10 +60,10 @@ fun AppNavHost(
             )
         ) { entry ->
             val id = entry.arguments?.getString("id").orEmpty()
-            PlaceholderScreen(
-                title = if (id.isEmpty()) "添加机器人" else "编辑机器人",
-                note = "表单页迁移中",
-                onBack = { navController.popBackStack() }
+            BotEditScreen(
+                botId = id,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
             )
         }
 
@@ -70,10 +75,10 @@ fun AppNavHost(
                     defaultValue = ""
                 }
             )
-        ) {
-            PlaceholderScreen(
-                title = "群配置",
-                note = "群列表迁移中",
+        ) { entry ->
+            val botId = entry.arguments?.getString("botId").orEmpty()
+            GroupListScreen(
+                botId = botId,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -93,11 +98,12 @@ fun AppNavHost(
                     defaultValue = ""
                 }
             )
-        ) {
-            PlaceholderScreen(
-                title = "人设编辑",
-                note = "人设表单迁移中",
-                onBack = { navController.popBackStack() }
+        ) { entry ->
+            val id = entry.arguments?.getString("id").orEmpty()
+            PersonaEditScreen(
+                personaId = id,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
             )
         }
 
@@ -116,11 +122,12 @@ fun AppNavHost(
                     defaultValue = ""
                 }
             )
-        ) {
-            PlaceholderScreen(
-                title = "模型编辑",
-                note = "模型表单迁移中",
-                onBack = { navController.popBackStack() }
+        ) { entry ->
+            val id = entry.arguments?.getString("id").orEmpty()
+            ModelEditScreen(
+                modelId = id,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
             )
         }
 
@@ -139,19 +146,11 @@ fun AppNavHost(
         }
 
         composable(Routes.PLUGINS) {
-            PlaceholderScreen(
-                title = "插件",
-                note = "插件页迁移中",
-                onBack = { navController.popBackStack() }
-            )
+            PluginScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.ABOUT) {
-            PlaceholderScreen(
-                title = "关于",
-                note = "关于页迁移中",
-                onBack = { navController.popBackStack() }
-            )
+            AboutScreen(onBack = { navController.popBackStack() })
         }
     }
 }
