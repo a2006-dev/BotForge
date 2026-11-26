@@ -1,21 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.BotForge" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="colorPrimary">#111827</item>
-        <item name="colorPrimaryDark">#0B1220</item>
-        <item name="colorAccent">#4F7CFF</item>
-        <item name="android:statusBarColor">#FFFFFF</item>
-        <item name="android:navigationBarColor">#FFFFFF</item>
-        <item name="android:windowBackground">#FFFFFF</item>
-        <item name="android:windowLightStatusBar">true</item>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        BotForge 应用主题（深色）
+        - 使用 Dark 父主题，确保 Material 组件默认走深色分支（文字、弹窗、输入框）。
+        - 系统栏颜色与窗口底色统一为 bg_primary，避免启动闪白。
+    -->
+    <style name="Theme.BotForge" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">@color/accent_primary</item>
+        <item name="colorPrimaryDark">@color/bg_primary</item>
+        <item name="colorAccent">@color/accent_primary</item>
+        <item name="android:colorBackground">@color/bg_primary</item>
+
+        <item name="android:windowBackground">@color/bg_primary</item>
+        <item name="android:statusBarColor">@color/bg_primary</item>
+        <item name="android:navigationBarColor">@color/bg_primary</item>
+
+        <!-- 深色底 → 系统栏图标用浅色 -->
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
+
+        <!-- 弹窗底色：跟随浮起层，避免纯黑突兀 -->
+        <item name="android:colorBackgroundFloating">@color/bg_elevated</item>
+
+        <!-- 文本主体色，供 AlertDialog / 原生控件继承 -->
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
     </style>
 
-    <color name="bg">#FFFFFF</color>
-    <color name="card">#F7F8FA</color>
-    <color name="accent">#111827</color>
-    <color name="text_main">#111111</color>
-    <color name="text_sub">#888888</color>
-    <color name="ok">#16A34A</color>
-    <color name="warn">#D97706</color>
-    <color name="err">#DC2626</color>
+    <!-- ============================================================
+         兼容别名
+         旧代码（XML）里可能引用 bg / card / accent / text_main 等名字，
+         这里统一映射到新令牌，避免引用断裂。
+         待所有页面迁移完成后可整块删除。
+         ============================================================ -->
+    <color name="bg">@color/bg_primary</color>
+    <color name="card">@color/bg_card</color>
+    <color name="accent">@color/accent_primary</color>
+    <color name="text_main">@color/text_primary</color>
+    <color name="text_sub">@color/text_secondary</color>
+    <color name="ok">@color/status_success</color>
+    <color name="warn">@color/status_warning</color>
+    <color name="err">@color/status_error</color>
+
 </resources>

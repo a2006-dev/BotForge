@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    BotForge 组件样式（View 侧）
+    - 只引用 @color / @dimen 令牌，不出现具体数值和色值。
+    - 新页面与迁移中的页面通过 style="..." 使用，旧页面可暂时保持原样。
+-->
+<resources>
+
+    <!-- ===================== 文本 ===================== -->
+
+    <style name="Text.Heading">
+        <item name="android:textSize">@dimen/text_size_heading</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Text.Title">
+        <item name="android:textSize">@dimen/text_size_title</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Text.Body">
+        <item name="android:textSize">@dimen/text_size_body</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+
+    <style name="Text.Secondary">
+        <item name="android:textSize">@dimen/text_size_label</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
+    <style name="Text.Caption">
+        <item name="android:textSize">@dimen/text_size_small</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+    </style>
+
+    <!-- 表单字段标签 -->
+    <style name="Text.FieldLabel">
+        <item name="android:textSize">@dimen/text_size_label</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:paddingStart">2dp</item>
+        <item name="android:paddingBottom">3dp</item>
+    </style>
+
+    <!-- ===================== 按钮 ===================== -->
+
+    <style name="Button.Primary">
+        <item name="android:layout_height">@dimen/button_height</item>
+        <item name="android:textSize">@dimen/text_size_body</item>
+        <item name="android:textColor">@color/text_on_accent</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:background">@drawable/bg_button_primary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Button.Secondary">
+        <item name="android:layout_height">@dimen/button_height</item>
+        <item name="android:textSize">@dimen/text_size_body</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:background">@drawable/bg_button_secondary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="Button.Danger">
+        <item name="android:layout_height">@dimen/button_height</item>
+        <item name="android:textSize">@dimen/text_size_body</item>
+        <item name="android:textColor">@color/status_error</item>
+        <item name="android:background">@drawable/bg_button_secondary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <!-- ===================== 输入框 ===================== -->
+
+    <style name="Input.Text">
+        <item name="android:textSize">@dimen/text_size_body</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
+        <item name="android:background">@drawable/bg_input</item>
+        <item name="android:paddingStart">@dimen/spacing_md</item>
+        <item name="android:paddingEnd">@dimen/spacing_md</item>
+        <item name="android:paddingTop">@dimen/spacing_md</item>
+        <item name="android:paddingBottom">@dimen/spacing_md</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textCursorDrawable">@null</item>
+    </style>
+
+    <!-- 多行输入（人设内容等长文本） -->
+    <style name="Input.Multiline" parent="Input.Text">
+        <item name="android:singleLine">false</item>
+        <item name="android:minLines">6</item>
+        <item name="android:gravity">top|start</item>
+    </style>
+
+    <!-- ===================== 卡片 / 列表 ===================== -->
+
+    <style name="Card">
+        <item name="android:background">@drawable/bg_card</item>
+        <item name="android:padding">@dimen/card_padding</item>
+        <item name="android:layout_marginTop">@dimen/card_gap</item>
+    </style>
+
+    <style name="List.Item">
+        <item name="android:minHeight">@dimen/list_item_min_height</item>
+        <item name="android:paddingStart">@dimen/card_padding</item>
+        <item name="android:paddingEnd">@dimen/card_padding</item>
+        <item name="android:paddingTop">@dimen/spacing_md</item>
+        <item name="android:paddingBottom">@dimen/spacing_md</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+
+    <!-- ===================== 状态标签 ===================== -->
+
+    <style name="Tag">
+        <item name="android:textSize">@dimen/text_size_caption</item>
+        <item name="android:paddingStart">@dimen/spacing_sm</item>
+        <item name="android:paddingEnd">@dimen/spacing_sm</item>
+        <item name="android:paddingTop">2dp</item>
+        <item name="android:paddingBottom">2dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Tag.Success">
+        <item name="android:textColor">@color/status_success</item>
+        <item name="android:background">@drawable/bg_tag_success</item>
+    </style>
+
+    <style name="Tag.Warning">
+        <item name="android:textColor">@color/status_warning</item>
+        <item name="android:background">@drawable/bg_tag_warning</item>
+    </style>
+
+    <style name="Tag.Error">
+        <item name="android:textColor">@color/status_error</item>
+        <item name="android:background">@drawable/bg_tag_error</item>
+    </style>
+
+    <style name="Tag.Idle">
+        <item name="android:textColor">@color/status_idle</item>
+        <item name="android:background">@drawable/bg_tag_idle</item>
+    </style>
+
+    <!-- ===================== 分割线 ===================== -->
+
+    <style name="Divider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/border_width</item>
+        <item name="android:background">@color/divider</item>
+    </style>
+
+</resources>
