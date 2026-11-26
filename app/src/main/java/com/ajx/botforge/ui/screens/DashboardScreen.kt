@@ -1,7 +1,6 @@
 package com.ajx.botforge.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,10 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -36,22 +33,25 @@ import com.ajx.botforge.data.Logger
 import com.ajx.botforge.permission.PermissionGuide
 import com.ajx.botforge.qq.BotConnState
 import com.ajx.botforge.qq.BotConnectionState
+import com.ajx.botforge.ui.components.AppCard
+import com.ajx.botforge.ui.components.ListRow
 import com.ajx.botforge.ui.components.PrimaryButton
+import com.ajx.botforge.ui.components.RowDivider
+import com.ajx.botforge.ui.components.RowGroup
 import com.ajx.botforge.ui.components.SecondaryButton
+import com.ajx.botforge.ui.components.SectionHeader
+import com.ajx.botforge.ui.components.StatusBadge
+import com.ajx.botforge.ui.components.StatusIndicator
+import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.data.BotForgeRepository
 import com.ajx.botforge.ui.data.DashboardStore
 import com.ajx.botforge.ui.theme.Bg0
 import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Bg2
 import com.ajx.botforge.ui.theme.Bg3
 import com.ajx.botforge.ui.theme.Brand
 import com.ajx.botforge.ui.theme.Danger
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
-import com.ajx.botforge.ui.theme.LineStrong
-import com.ajx.botforge.ui.theme.Success
 import com.ajx.botforge.ui.theme.Radius
-import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
 import com.ajx.botforge.ui.theme.TextHigh
 import com.ajx.botforge.ui.theme.TextLow
@@ -61,20 +61,16 @@ import com.ajx.botforge.ui.theme.Warning
 /**
  * 首页 —— 机器人运行管理中心
  *
- * 按任务书第一节整改：重新梳理信息层级，优先展示
- * 服务状态 / 真实在线机器人 / 运行异常，并增加最近运行事件。
+ * 按任务书第一节整改：
+ *   1. 重新梳理首页信息层级 —— 服务状态 / 真实在线 / 运行异常优先
+ *   2. 增加最近运行事件和错误信息
+ *   3. 所有指标来自真实业务数据，禁止虚构
+ *   4. 使用 StateFlow 实现状态同步
+ *   5. 明确区分服务运行状态与 WebSocket 连接状态
  *
- * 信息层级（从上到下，重要度递减）：
- *   1. 品牌区      BotForge + 一句话概括（在线数如实反映连接层）
- *   2. 服务状态区  前台服务存活 + 主操作按钮（唯一主操作）
- *   3. 连接状态区  每个机器人的真实 WebSocket 状态（不是"配置了几个"）
- *   4. 运行异常    仅在出错时出现，避免常态占位
- *   5. 最近事件    真实日志尾部，让用户看到"刚才发生了什么"
- *   6. 数据统计    人设/模型/日志条数
- *   7. 功能入口    按"管理 / 运维 / 关于"分组
- *
- * 所有数字都来自 BotManager / BotStatusRegistry / Config / Logger，
- * 没有任何虚构指标（不编造成功率、健康度之类的数字）。
+ * 按任务书第二节要求，全部复用 components 包里的标准组件
+ * （PageTopBar / AppCard / StatusIndicator / StatusBadge / RowGroup /
+ *  ListRow / SectionHeader / RowDivider），不在这里另造一套。
  */
 @Composable
 fun DashboardScreen(
@@ -99,14 +95,13 @@ fun DashboardScreen(
     var toast by remember { mutableStateOf<String?>(null) }
     var permStatus by remember { mutableStateOf<PermissionGuide.Status?>(null) }
 
-    // 订阅连接层推送（幂等）。页面重建后不会丢事件，因为 Store 是进程单例。
     LaunchedEffect(Unit) {
         DashboardStore.install()
         DashboardStore.refreshAll()
         permStatus = PermissionGuide.status(context)
     }
 
-    // 服务存活、配置数量、日志需要轮询（这些没有推送源）；
+    // 服务存活、配置数量、日志没有推送源，用轮询；
     // 连接状态由 BotStatusRegistry 推送，不依赖轮询。
     LaunchedEffect(Unit) {
         while (true) {
@@ -115,10 +110,6 @@ fun DashboardScreen(
             permStatus = PermissionGuide.status(context)
         }
     }
-
-    // 离开页面时不解除订阅：DashboardStore 是进程单例，
-    // 保留已积累的失败/重连事件，返回首页时能立刻看到刚才发生了什么。
-    // 真正需要清理时由 App 退出统一处理。
 
     LaunchedEffect(toast) {
         if (toast != null) {
@@ -151,7 +142,7 @@ fun DashboardScreen(
                 .background(Bg1)
                 .verticalScroll(rememberScrollState())
         ) {
-            // ---------- 1. 品牌区 ----------
+            // 品牌区：大字 + 一句话真实状态
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -166,7 +157,12 @@ fun DashboardScreen(
                 )
                 Spacer(Modifier.height(Spacing.xxs))
                 Text(
-                    text = summaryLine(state.serviceRunning, state.summary.loaded, state.summary.online, state.summary.hasAny),
+                    text = summaryLine(
+                        state.serviceRunning,
+                        state.summary.loaded,
+                        state.summary.online,
+                        state.summary.hasAny
+                    ),
                     color = TextMid,
                     fontSize = FontSize.small
                 )
@@ -175,108 +171,163 @@ fun DashboardScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(Spacing.md),
-                verticalArrangement = Arrangement.spacedBy(Spacing.lg)
+                    .padding(horizontal = Spacing.md)
             ) {
-                // ---------- 2. 服务状态区 ----------
-                ServicePanel(
-                    running = state.serviceRunning,
-                    onToggle = { toggle() }
-                )
+                // ---------- 服务状态 + 主操作 ----------
+                Spacer(Modifier.height(Spacing.md))
+                AppCard {
+                    StatusIndicator(
+                        text = if (state.serviceRunning) "前台服务运行中" else "前台服务已停止",
+                        tone = if (state.serviceRunning) StatusTone.Success else StatusTone.Neutral
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    Text(
+                        text = if (state.serviceRunning) {
+                            "退出界面不会断开；熄屏后依赖保活配置"
+                        } else {
+                            "启动后建立 QQ 网关长连接"
+                        },
+                        color = TextLow,
+                        fontSize = FontSize.micro
+                    )
+                    Spacer(Modifier.height(Spacing.md))
+                    if (state.serviceRunning) {
+                        SecondaryButton(
+                            text = "停止服务",
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { toggle() }
+                        )
+                    } else {
+                        PrimaryButton(
+                            text = "启动服务",
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { toggle() }
+                        )
+                    }
+                }
 
-                // 权限未补齐时提示（依附在状态区之后，不抢占主操作位置）
+                // 权限未补齐提示（有缺才显示）
                 val ps = permStatus
                 if (ps != null && !ps.allGood) {
-                    PermissionNotice(
-                        text = PermissionGuide.missingText(ps),
-                        onFix = {
-                            onRequestPermissions()
-                            permStatus = PermissionGuide.status(context)
-                        }
-                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    AppCard(background = Bg3) {
+                        Text(
+                            text = "权限未补齐",
+                            color = Warning,
+                            fontSize = FontSize.small,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(Modifier.height(Spacing.xxs))
+                        Text(
+                            text = PermissionGuide.missingText(ps),
+                            color = TextLow,
+                            fontSize = FontSize.micro
+                        )
+                        Spacer(Modifier.height(Spacing.sm))
+                        SecondaryButton(
+                            text = "立即补齐权限",
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                onRequestPermissions()
+                                permStatus = PermissionGuide.status(context)
+                            }
+                        )
+                    }
                 }
 
-                // ---------- 3. 连接状态区 ----------
-                // 只在服务启动后才有意义；未启动时显示"未启动"而不是一排 0
+                // ---------- 连接状态（真实 WebSocket 状态，不是配置数） ----------
                 if (state.serviceRunning || state.bots.isNotEmpty()) {
-                    SectionTitle("连接状态")
+                    SectionHeader("连接状态")
                     if (state.bots.isEmpty()) {
-                        HintRow("等待机器人加载…")
+                        AppCard {
+                            Text(
+                                text = "等待机器人加载…",
+                                color = TextLow,
+                                fontSize = FontSize.small
+                            )
+                        }
                     } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                            state.bots.forEach { bot -> BotCard(bot) }
+                        state.bots.forEach { bot ->
+                            BotCard(bot)
+                            Spacer(Modifier.height(Spacing.sm))
                         }
                     }
                 }
 
-                // ---------- 4. 运行异常（有才显示） ----------
+                // ---------- 运行异常（有才出现） ----------
                 if (state.hasAbnormal) {
-                    SectionTitle("运行异常")
-                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                        state.abnormalBots.forEach { bot ->
-                            AbnormalRow(bot)
-                        }
-                        if (state.abnormalBots.isEmpty() && state.summary.error > 0) {
-                            HintRow("${state.summary.error} 个机器人处于异常状态，详见运行日志")
+                    SectionHeader("运行异常")
+                    state.abnormalBots.forEach { bot ->
+                        AbnormalCard(bot)
+                        Spacer(Modifier.height(Spacing.sm))
+                    }
+                    if (state.abnormalBots.isEmpty() && state.summary.error > 0) {
+                        AppCard {
+                            Text(
+                                text = "${state.summary.error} 个机器人处于异常状态，详见运行日志",
+                                color = TextMid,
+                                fontSize = FontSize.small
+                            )
                         }
                     }
                 }
 
-                // ---------- 5. 最近运行事件 ----------
-                SectionTitle("最近运行事件")
-                EventList(
-                    events = state.events,
-                    onOpenLogs = onOpenLogs
-                )
+                // ---------- 最近运行事件 ----------
+                SectionHeader("最近运行事件")
+                RowGroup {
+                    if (state.events.isEmpty()) {
+                        ListRow(title = "暂无运行记录", subtitle = "启动服务后这里会显示最近事件")
+                    } else {
+                        state.events.forEachIndexed { index, line ->
+                            if (index > 0) RowDivider()
+                            EventRow(line)
+                        }
+                        RowDivider()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onOpenLogs)
+                                .padding(vertical = Spacing.sm),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "查看全部日志 ›", color = Brand, fontSize = FontSize.small)
+                        }
+                    }
+                }
 
-                // ---------- 6. 数据统计 ----------
-                SectionTitle("数据")
+                // ---------- 数据 ----------
+                SectionHeader("数据")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    StatTile(
-                        label = "人设",
-                        value = "${state.personaCount}",
-                        sub = "条",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatTile(
-                        label = "模型",
-                        value = "${state.modelCount}",
-                        sub = "个",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatTile(
-                        label = "日志",
-                        value = "${state.logTotal}",
-                        sub = "条",
-                        modifier = Modifier.weight(1f)
-                    )
+                    StatTile("人设", "${state.personaCount}", "条", Modifier.weight(1f))
+                    StatTile("模型", "${state.modelCount}", "个", Modifier.weight(1f))
+                    StatTile("日志", "${state.logTotal}", "条", Modifier.weight(1f))
                 }
 
-                // ---------- 7. 功能入口 ----------
-                SectionTitle("管理")
-                EntryGroup {
-                    EntryRow("机器人配置", "AppID、密钥、群白名单", onOpenBots)
-                    Divider()
-                    EntryRow("人设", "提示词、语气、记忆深度", onOpenPersonas)
-                    Divider()
-                    EntryRow("模型", "接口地址、密钥、超时", onOpenModels)
+                // ---------- 功能入口 ----------
+                SectionHeader("管理")
+                RowGroup {
+                    ListRow(title = "机器人配置", subtitle = "AppID、密钥、群白名单", onClick = onOpenBots)
+                    RowDivider()
+                    ListRow(title = "人设", subtitle = "提示词、语气、记忆深度", onClick = onOpenPersonas)
+                    RowDivider()
+                    ListRow(title = "模型", subtitle = "接口地址、密钥、超时", onClick = onOpenModels)
                 }
 
-                SectionTitle("运维")
-                EntryGroup {
-                    EntryRow("运行日志", "${state.logTotal} 条记录", onOpenLogs)
-                    Divider()
-                    EntryRow("插件", "查看已加载插件", onOpenPlugins)
-                    Divider()
-                    EntryRow("设置", "全局开关与保活配置", onOpenSettings)
+                SectionHeader("运维")
+                RowGroup {
+                    ListRow(title = "运行日志", subtitle = "${state.logTotal} 条记录", onClick = onOpenLogs)
+                    RowDivider()
+                    ListRow(title = "插件", subtitle = "查看已加载插件", onClick = onOpenPlugins)
+                    RowDivider()
+                    ListRow(title = "设置", subtitle = "全局开关与保活配置", onClick = onOpenSettings)
                 }
 
-                SectionTitle("关于")
-                EntryGroup {
-                    EntryRow("关于 BotForge", "版本与项目信息", onOpenAbout)
+                SectionHeader("关于")
+                RowGroup {
+                    ListRow(title = "关于 BotForge", subtitle = "版本与项目信息", onClick = onOpenAbout)
                 }
 
                 Spacer(Modifier.height(Spacing.huge))
@@ -294,7 +345,6 @@ fun DashboardScreen(
                 Box(
                     modifier = Modifier
                         .background(Bg3, RoundedCornerShape(Radius.md))
-                        .border(Sizes.hairline, LineStrong, RoundedCornerShape(Radius.md))
                         .padding(horizontal = Spacing.md, vertical = Spacing.sm)
                 ) {
                     Text(text = msg, color = TextHigh, fontSize = FontSize.small)
@@ -306,117 +356,52 @@ fun DashboardScreen(
 
 // ---------------------------------------------------------------- 子组件
 
-/** 品牌区副标题：一句话说清当前处于什么阶段，全部基于真实计数 */
-private fun summaryLine(serviceRunning: Boolean, loaded: Int, online: Int, hasAny: Boolean): String {
+/** 品牌区副标题：一句话说清当前阶段，全部基于真实计数 */
+private fun summaryLine(
+    serviceRunning: Boolean,
+    loaded: Int,
+    online: Int,
+    hasAny: Boolean
+): String {
     if (!serviceRunning) return "前台服务未启动"
     if (loaded == 0) return "服务运行中 · 暂无启用机器人"
     if (!hasAny) return "服务运行中 · 等待连接"
     return "服务运行中 · $online/$loaded 在线"
 }
 
-/** 服务状态面板：存活指示 + 主操作按钮（整个 App 最主要的动作） */
-@Composable
-private fun ServicePanel(running: Boolean, onToggle: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.lg))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
-            .padding(Spacing.md)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(Sizes.dot)
-                    .background(if (running) Success else TextLow, CircleShape)
-            )
-            Spacer(Modifier.width(Spacing.sm))
-            Text(
-                text = if (running) "前台服务运行中" else "前台服务已停止",
-                color = TextHigh,
-                fontSize = FontSize.body,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(Modifier.height(Spacing.xs))
-        Text(
-            text = if (running) {
-                "退出界面不会断开；熄屏后依赖保活配置"
-            } else {
-                "启动后建立 QQ 网关长连接"
-            },
-            color = TextLow,
-            fontSize = FontSize.micro
-        )
-        Spacer(Modifier.height(Spacing.md))
-        if (running) {
-            SecondaryButton(
-                text = "停止服务",
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onToggle
-            )
-        } else {
-            PrimaryButton(
-                text = "启动服务",
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onToggle
-            )
-        }
-    }
+private fun toneOf(state: BotConnState): Pair<StatusTone, String> = when (state) {
+    BotConnState.CONNECTED -> StatusTone.Success to "在线"
+    BotConnState.CONNECTING -> StatusTone.Warning to "连接中"
+    BotConnState.AUTHENTICATING -> StatusTone.Warning to "鉴权中"
+    BotConnState.RECONNECTING -> StatusTone.Warning to "重连中"
+    BotConnState.ERROR -> StatusTone.Danger to "异常"
+    BotConnState.STOPPED -> StatusTone.Neutral to "已停止"
 }
 
-/** 单个机器人的连接卡片：状态、在线时长、心跳、ACK、重连次数 */
+/** 单机器人连接卡：状态 + 心跳 / ACK / 重连 + 代次与上线时刻 */
 @Composable
 private fun BotCard(bot: BotConnectionState) {
-    val (toneColor, toneLabel) = when (bot.state) {
-        BotConnState.CONNECTED -> Success to "在线"
-        BotConnState.CONNECTING -> Warning to "连接中"
-        BotConnState.AUTHENTICATING -> Warning to "鉴权中"
-        BotConnState.RECONNECTING -> Warning to "重连中"
-        BotConnState.ERROR -> Danger to "异常"
-        BotConnState.STOPPED -> TextLow to "已停止"
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.lg))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
-            .padding(Spacing.md)
-    ) {
+    val (tone, label) = toneOf(bot.state)
+    AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(Sizes.dot)
-                    .background(toneColor, CircleShape)
-            )
-            Spacer(Modifier.width(Spacing.sm))
-            Text(
+            StatusIndicator(
                 text = bot.botName.ifEmpty { bot.botId },
-                color = TextHigh,
-                fontSize = FontSize.body,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                tone = tone,
                 modifier = Modifier.weight(1f)
             )
-            Text(text = toneLabel, color = toneColor, fontSize = FontSize.caption)
+            StatusBadge(text = label, tone = tone)
         }
-
         Spacer(Modifier.height(Spacing.sm))
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xl)) {
             MiniStat("心跳", heartbeatText(bot.heartbeatInterval))
             MiniStat("ACK", bot.ackLatencyText())
             MiniStat("重连", "${bot.reconnectCount}")
         }
-
-        // 代次与连接时刻：排查问题时的关键线索，平时不喧宾夺主
         if (bot.generation > 0) {
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 text = "第 ${bot.generation} 代连接" +
-                        if (bot.connectedAt > 0) " · " + clockText(bot.connectedAt) + " 上线" else "",
+                        if (bot.connectedAt > 0) " · ${clockText(bot.connectedAt)} 上线" else "",
                 color = TextLow,
                 fontSize = FontSize.micro
             )
@@ -424,28 +409,26 @@ private fun BotCard(bot: BotConnectionState) {
     }
 }
 
-/** 异常行：错误原因直接展示，不需要点进日志 */
+/** 异常卡：错误原因直接可见，不必点进日志 */
 @Composable
-private fun AbnormalRow(bot: BotConnectionState) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.md))
-            .border(Sizes.hairline, Danger.copy(alpha = 0.35f), RoundedCornerShape(Radius.md))
-            .padding(Spacing.md)
-    ) {
-        Text(
-            text = bot.botName.ifEmpty { bot.botId } + " · " + bot.state.label,
-            color = Danger,
-            fontSize = FontSize.small,
-            fontWeight = FontWeight.Medium
-        )
+private fun AbnormalCard(bot: BotConnectionState) {
+    AppCard(bordered = true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = bot.botName.ifEmpty { bot.botId },
+                color = TextHigh,
+                fontSize = FontSize.body,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            StatusBadge(text = bot.state.label, tone = StatusTone.Danger)
+        }
         val err = bot.lastError
         if (!err.isNullOrEmpty()) {
             Spacer(Modifier.height(Spacing.xxs))
             Text(
                 text = err,
-                color = TextMid,
+                color = Danger,
                 fontSize = FontSize.micro,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
@@ -454,36 +437,7 @@ private fun AbnormalRow(bot: BotConnectionState) {
     }
 }
 
-/** 最近运行事件列表：来自 Logger 环形缓冲的真实日志尾部 */
-@Composable
-private fun EventList(events: List<Logger.Line>, onOpenLogs: () -> Unit) {
-    if (events.isEmpty()) {
-        HintRow("暂无运行记录")
-        return
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.lg))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
-    ) {
-        events.forEachIndexed { index, line ->
-            if (index > 0) Divider()
-            EventRow(line)
-        }
-        Divider()
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onOpenLogs)
-                .padding(vertical = Spacing.sm),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(text = "查看全部日志 ›", color = Brand, fontSize = FontSize.small)
-        }
-    }
-}
-
+/** 事件行：时间 + 内容，级别决定颜色 */
 @Composable
 private fun EventRow(line: Logger.Line) {
     val color = when (line.level) {
@@ -516,53 +470,6 @@ private fun EventRow(line: Logger.Line) {
 }
 
 @Composable
-private fun PermissionNotice(text: String, onFix: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Bg3, RoundedCornerShape(Radius.md))
-            .padding(Spacing.md)
-    ) {
-        Text(
-            text = "权限未补齐",
-            color = Warning,
-            fontSize = FontSize.small,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.height(Spacing.xxs))
-        Text(text = text, color = TextLow, fontSize = FontSize.micro)
-        Spacer(Modifier.height(Spacing.sm))
-        SecondaryButton(
-            text = "立即补齐权限",
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onFix
-        )
-    }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        color = TextLow,
-        fontSize = FontSize.caption,
-        fontWeight = FontWeight.Medium
-    )
-}
-
-@Composable
-private fun HintRow(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.md))
-            .padding(Spacing.md)
-    ) {
-        Text(text = text, color = TextLow, fontSize = FontSize.small)
-    }
-}
-
-@Composable
 private fun MiniStat(label: String, value: String) {
     Column {
         Text(text = label, color = TextLow, fontSize = FontSize.micro)
@@ -572,12 +479,7 @@ private fun MiniStat(label: String, value: String) {
 
 @Composable
 private fun StatTile(label: String, value: String, sub: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .background(Bg2, RoundedCornerShape(Radius.lg))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
-            .padding(Spacing.md)
-    ) {
+    AppCard(modifier = modifier) {
         Text(text = label, color = TextLow, fontSize = FontSize.caption)
         Spacer(Modifier.height(Spacing.xxs))
         Text(
@@ -590,51 +492,6 @@ private fun StatTile(label: String, value: String, sub: String, modifier: Modifi
     }
 }
 
-@Composable
-private fun EntryGroup(content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.lg))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
-    ) {
-        content()
-    }
-}
-
-@Composable
-private fun EntryRow(title: String, subtitle: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.md, vertical = Spacing.md),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = TextHigh,
-                fontSize = FontSize.body,
-                fontWeight = FontWeight.Medium
-            )
-            Text(text = subtitle, color = TextLow, fontSize = FontSize.micro)
-        }
-        Text(text = "›", color = TextLow, fontSize = FontSize.title)
-    }
-}
-
-@Composable
-private fun Divider() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = Spacing.md)
-            .height(Sizes.hairline)
-            .background(Line)
-    )
-}
-
 // ---------------------------------------------------------------- 工具
 
 private fun heartbeatText(intervalMs: Long): String = when {
@@ -643,7 +500,5 @@ private fun heartbeatText(intervalMs: Long): String = when {
     else -> "${intervalMs}ms"
 }
 
-private fun clockText(epochMs: Long): String {
-    val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.CHINA)
-    return fmt.format(java.util.Date(epochMs))
-}
+private fun clockText(epochMs: Long): String =
+    java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.CHINA).format(java.util.Date(epochMs))
