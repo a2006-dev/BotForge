@@ -59,18 +59,19 @@ jobs:
         run: |
           gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
+        continue-on-error: true
 
       - name: Build release
         run: |
           gradle :app:assembleRelease --stacktrace --no-daemon 2>&1 | tee release.log || echo "release 失败，仅产出 debug"
 
-      - name: Report build log to summary
-        if: failure()
+      - name: Report build log to paste
+        if: always()
         run: |
           if [ -f build.log ]; then
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 120 build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            URL=$(tail -n 200 build.log | curl -sS --max-time 30 --data-binary @- https://paste.rs/ || echo FAILED)
+            echo "BUILD_LOG_URL=$URL" >> $GITHUB_STEP_SUMMARY
+            echo "BUILD_LOG_URL=$URL"
           fi
 
       - name: Upload build log
