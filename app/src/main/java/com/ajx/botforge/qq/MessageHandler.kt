@@ -8,6 +8,8 @@ import com.ajx.botforge.ai.Memory
 import com.ajx.botforge.ai.WebSearch
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
+import com.ajx.botforge.plugin.PluginRegistry
+import com.ajx.botforge.plugin.PluginRunner
 
 /**
  * 消息处理：去重 → 群策略校验 → 上下文召回 → 意图识别 → 可选联网 → 调模型 → 回复
@@ -253,13 +255,88 @@ object MessageHandler {
                 true
             }
             "/help", "/帮助" -> {
-                reply(
-                    bot, ev,
-                    "可用指令：/reset 清空上下文 · /ping 测试在线 · /help 本说明"
-                )
+                reply(bot, ev, helpText())
                 true
             }
-            else -> false
+            else -> handlePlugin(bot, ev, text, cmd)
         }
+    }
+
+    /** 生成帮助文本，内置指令 + 当前场景可用的插件指令 */
+    private fun helpText(): String {
+        val sb = StringBuilder("内置指令\n")
+        sb.append("/reset 清空上下文\n/ping 测试在线\n/help 本说明\n")
+        val plug = PluginRegistry.all()
+        if (plug.isEmpty()) {
+            sb.append("\n（未安装插件）")
+        } else {
+            sb.append("\n插件指令\n")
+            for (p in plug) {
+                for (c in p.commands) {
+                    sb.append(c.usage).append(" — ").append(c.description).append("\n")
+                }
+            }
+            sb.append("\n放插件到：\n").append(PluginRegistry.rootDir()?.absolutePath ?: "-")
+        }
+        return sb.toString().trim()
+    }
+
+    /**
+     * 插件路由。返回 true 表示该消息已被插件处理。
+     * 安全约束：
+     *  - scope 未声明 group 的插件，群里不会执行
+     *  - confirm 为 true 的指令需要二次确认（当前先提示，不执行）
+     */
+    private fun handlePlugin(
+        bot: Config.Bot,
+        ev: BotClient.Event,
+        text: String,
+        cmdWithSlash: String
+    ): Boolean {
+        if (!cmdWithSlash.startsWith("/")) return false
+        val name = cmdWithSlash.removePrefix("/")
+        if (name.isEmpty()) return false
+
+        // /插件 列表
+        if (name == "plugins" || name == "插件") {
+            val list = PluginRegistry.all()
+            if (list.isEmpty()) {
+                reply(bot, ev, "还没有安装任何插件。\n把插件目录放到：\n${PluginRegistry.rootDir()?.absolutePath ?: "-"}")
+            } else {
+                val sb = StringBuilder("已安装 ${list.size} 个插件\n")
+                for (p in list) {
+                    sb.append("\n${p.name} v${p.version}  (${p.id})\n")
+                    for (c in p.commands) sb.append("  ${c.usage}\n")
+                }
+                reply(bot, ev, sb.toString().trim())
+            }
+            return true
+        }
+
+        // /reload-plugins 重新扫描
+        if (name == "reload-plugins" || name == "重载插件") {
+            PluginRegistry.reload()
+            reply(bot, ev, "已重新扫描，当前 ${PluginRegistry.all().size} 个插件，${PluginRegistry.commandNames().size} 条指令。")
+            return true
+        }
+
+        val pc = PluginRegistry.find(name) ?: return false
+
+        if (!pc.allows(ev.scene)) {
+            reply(bot, ev, "指令 /${pc.command} 不允许在${if (ev.scene == "group") "群聊" else "私聊"}中使用。")
+            return true
+        }
+
+        if (pc.confirm) {
+            reply(bot, ev, "指令 /${pc.command} 需要确认后执行（确认功能尚未开放）。")
+            return true
+        }
+
+        // 参数：指令名之后的部分按空白切分
+        val args = text.trim().split(Regex("\\s+")).drop(1)
+        val r = PluginRunner.run(pc, args)
+        val body = if (r.ok) r.output else "❌ ${r.output}"
+        reply(bot, ev, body)
+        return true
     }
 }

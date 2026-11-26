@@ -13,6 +13,7 @@ class App : Application() {
         super.onCreate()
         instance = this
         Config.init(this)
+        com.ajx.botforge.plugin.PluginRegistry.init(this)
         com.ajx.botforge.data.Logger.i("App", "BotForge 启动 v${BuildConfig.VERSION_NAME}")
         createChannels()
     }
