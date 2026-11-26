@@ -72,7 +72,7 @@ object WebSearch {
         s = JS_OBJ_RE.replace(s, " ")
         s = s.replace("&nbsp;", " ").replace("&amp;", "&")
             .replace("&lt;", "<").replace("&gt;", ">")
-            .replace(""", "\"").replace("&#39;", "'")
+            .replace("&quot;", "\"").replace("&#39;", "'")
             .replace("&hellip;", "…").replace("&mdash;", "—")
         s = SPACE_RE.replace(s, " ").trim()
         if (URL_TAIL_RE.matches(s)) return ""
