@@ -101,6 +101,21 @@ object ShizukuKeepAlive {
         }
     }
 
+    /** Shizuku.newProcess 在 13.x 是 private API，用反射拿 */
+    @Suppress("PrivateAPI", "DiscouragedPrivateApi")
+    private fun newProcess(cmdArray: Array<String>): Process {
+        val cls = Shizuku::class.java
+        val m = cls.getDeclaredMethod(
+            "newProcess",
+            Array<String>::class.java,
+            Array<String>::class.java,
+            String::class.java
+        )
+        m.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        return m.invoke(null, cmdArray, null, null) as Process
+    }
+
     /** 通过 Shizuku 执行 shell 命令，返回输出 */
     fun exec(cmd: String): String {
         return try {
@@ -108,9 +123,7 @@ object ShizukuKeepAlive {
             if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
                 return "ERROR: 未授权"
             }
-            val proc = Shizuku.newProcess(
-                arrayOf("sh", "-c", cmd), null, null
-            )
+            val proc = newProcess(arrayOf("sh", "-c", cmd))
             val out = proc.inputStream.bufferedReader().use { it.readText() }
             val err = proc.errorStream.bufferedReader().use { it.readText() }
             proc.waitFor()

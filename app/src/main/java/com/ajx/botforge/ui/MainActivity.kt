@@ -163,16 +163,16 @@ class MainActivity : AppCompatActivity() {
     private fun applyShizuku(): Boolean {
         val st = ShizukuKeepAlive.status(this)
         if (!st.running) {
-            toast("Shizuku 未运行，请先打开 Shizuku")
+            Toast.makeText(this, "Shizuku 未运行，请先打开 Shizuku", Toast.LENGTH_SHORT).show()
             return false
         }
         if (!st.granted) {
-            toast("请在 Shizuku 弹窗里允许 BotForge")
+            Toast.makeText(this, "请在 Shizuku 弹窗里允许 BotForge", Toast.LENGTH_SHORT).show()
             return false
         }
         val a = ShizukuKeepAlive.whitelistBattery(this)
         val b = ShizukuKeepAlive.allowBackground(this)
-        toast(if (a && b) "已放开后台限制" else "部分完成，详见日志")
+        Toast.makeText(this, if (a && b) "已放开后台限制" else "部分完成，详见日志", Toast.LENGTH_SHORT).show()
         return true
     }
 

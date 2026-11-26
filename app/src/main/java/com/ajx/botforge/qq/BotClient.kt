@@ -165,7 +165,8 @@ class BotClient(
 
     private fun startHeartbeat(client: WsClient) {
         heartbeatThread = Thread({
-            while (running && client.isAlive()) {
+            var alive = true
+            while (alive && running && client.isAlive()) {
                 sleepQuiet(interval)
                 if (!running || !client.isAlive()) break
                 runCatching {
@@ -174,7 +175,7 @@ class BotClient(
                         if (seq > 0) put("d", seq)
                     }
                     client.send(p.toString())
-                }.onFailure { break }
+                }.onFailure { alive = false }
             }
         }, "heartbeat-${cfg.appId}").also { it.isDaemon = true; it.start() }
     }
