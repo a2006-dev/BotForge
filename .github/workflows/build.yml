@@ -64,6 +64,16 @@ jobs:
         run: |
           gradle :app:assembleRelease --stacktrace --no-daemon 2>&1 | tee release.log || echo "release 失败，仅产出 debug"
 
+      - name: Report build log to issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f build.log ]; then
+            ERR=$(grep -E "^e: |error:|FAILURE:|What went wrong" build.log | head -40)
+            gh issue create --title "CI fail $(date +%s)" --body "$(echo "$ERR" | head -c 60000)" || true
+          fi
+
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
