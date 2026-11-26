@@ -11,6 +11,9 @@ import org.json.JSONObject
  */
 object Config {
 
+    /** 官方事件订阅：只订阅 GROUP_AND_C2C_EVENT(1<<25) */
+    const val GROUP_INTENTS = 1L shl 25
+
     private lateinit var sp: SharedPreferences
 
     fun init(ctx: Context) {
@@ -26,7 +29,13 @@ object Config {
         val personaId: String,
         val modelId: String,
         val enabled: Boolean,
-        val intents: Long = 1174409216L,
+        // 官方事件订阅 intents 位（见 event-emit 文档）：
+        //   1<<25 GROUP_AND_C2C_EVENT  → C2C_MESSAGE_CREATE / GROUP_AT_MESSAGE_CREATE /
+        //                                GROUP_ADD_ROBOT / FRIEND_ADD 等，本项目唯一需要的一组
+        // 注意：订阅无权限的 intents，网关在 Identify 后会直接关闭连接。
+        // 之前用的是 1174409216（额外含 1<<12 频道私信、1<<26 互动、1<<30 频道消息），
+        // 这三类都需要单独申请权限，必须去掉。
+        val intents: Long = 1L shl 25,
         val groups: List<GroupCfg> = emptyList()
     )
 
@@ -59,6 +68,13 @@ object Config {
                         )
                     )
                 }
+                // 归一化 intents：只保留 GROUP_AND_C2C_EVENT(1<<25)。
+                // 旧版本写入过 1174409216，含 3 个无权限的位，会让网关在
+                // Identify 后直接关闭连接，这里强制纠正，避免旧配置继续生效。
+                val rawIntents = o.optLong("intents", GROUP_INTENTS)
+                val fixedIntents =
+                    if (rawIntents and GROUP_INTENTS == 0L) GROUP_INTENTS
+                    else rawIntents and GROUP_INTENTS
                 list.add(
                     Bot(
                         o.optString("id"),
@@ -68,7 +84,7 @@ object Config {
                         o.optString("personaId"),
                         o.optString("modelId"),
                         o.optBoolean("enabled", true),
-                        o.optLong("intents", 1174409216L),
+                        fixedIntents,
                         gs
                     )
                 )
