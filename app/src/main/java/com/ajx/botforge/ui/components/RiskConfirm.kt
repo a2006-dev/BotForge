@@ -304,7 +304,7 @@ private fun Modifier.androidClickableIf(
     enabled: Boolean,
     onClick: () -> Unit
 ): Modifier = if (enabled) {
-    this.then(androidx.compose.foundation.clickable(enabled = true, onClick = onClick))
+    this.then(Modifier.clickable(onClick = onClick))
 } else {
     this
 }

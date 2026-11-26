@@ -68,7 +68,7 @@ class TerminalSession(
             val masterFdObj = pty[0]
             val slave = pty[1]
             master = masterFdObj
-            val slaveFd = slave.fd
+            val slaveFd = fdOf(slave)
 
             // 拿到从端的真实设备路径（/dev/pts/N）。
             // 不能用 /proc/self/fd/N 直接当重定向目标：读完链接后拿到的是
@@ -97,6 +97,18 @@ class TerminalSession(
             close()
             false
         }
+    }
+
+    /**
+     * 取 [FileDescriptor] 的原始 int 描述符。
+     *
+     * `FileDescriptor.fd` 的公开访问器自 API 30 才出现，低版本只能读
+     * 私有字段 `descriptor`。这里统一走反射，避免随系统版本分叉。
+     */
+    private fun fdOf(fd: FileDescriptor): Int {
+        val f = FileDescriptor::class.java.getDeclaredField("descriptor")
+        f.isAccessible = true
+        return f.getInt(fd)
     }
 
     /**
