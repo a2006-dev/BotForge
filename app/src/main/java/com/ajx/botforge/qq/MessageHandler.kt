@@ -56,7 +56,7 @@ object MessageHandler {
         if (text.startsWith("/")) {
             if (handleCommand(ctx, bot, ev, text)) return
         }
-        if (text.isEmpty()) return
+        if (text.isEmpty() && ev.images.isEmpty()) return
 
         // 找模型与人设
         val personas = Config.loadPersonas()
@@ -100,7 +100,7 @@ object MessageHandler {
         sb.append("\n\n【输出要求】直接输出要发到聊天里的话，不要加引号、不要写角色名、不要旁白描写，控制在 120 字内。")
 
         // 联网
-        var userContent = text
+        var userContent = if (text.isBlank()) "（发了图片，没配文字）" else text
         val hasImage = ev.images.isNotEmpty()
         if (!hasImage && Config.searchEnabled && shouldSearch(text)) {
             try {
