@@ -32,9 +32,20 @@ object Config {
      */
     private fun readSecret(obj: JSONObject, jsonField: String, vaultKey: String): String {
         val inVault = SecretStore.get(vaultKey)
-        if (inVault.isNotEmpty()) return inVault
         val plain = obj.optString(jsonField)
-        if (plain.isEmpty() || plain == SecretStore.PLACEHOLDER) return ""
+        val isPlain = plain.isNotEmpty() && plain != SecretStore.PLACEHOLDER
+
+        if (inVault.isNotEmpty()) {
+            // 保险箱已有值，但 JSON 里可能残留明文（如旧备份被还原）→ 就地清除
+            if (isPlain) {
+                obj.put(jsonField, SecretStore.PLACEHOLDER)
+                migratedAny = true
+                Logger.i("Secret", "检测到残留明文，已替换为占位符: $vaultKey")
+            }
+            return inVault
+        }
+
+        if (!isPlain) return ""
         // 旧版本明文 → 迁移：真值进保险箱，并把 JSON 里的明文就地替换成占位符。
         // 注意必须替换，否则迁移只搬了副本，磁盘上仍是明文。
         SecretStore.put(vaultKey, plain)
