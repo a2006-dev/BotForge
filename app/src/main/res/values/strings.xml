@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BotForge</string>
+    <string name="app_desc">安卓上的 QQ 官方机器人客户端</string>
+
+    <string name="nav_home">主页</string>
+    <string name="nav_bots">机器人</string>
+    <string name="nav_personas">人设</string>
+    <string name="nav_models">模型</string>
+    <string name="nav_tools">工具</string>
+    <string name="nav_settings">设置</string>
+
+    <string name="status_online">在线</string>
+    <string name="status_offline">离线</string>
+    <string name="status_connecting">连接中</string>
+</resources>
