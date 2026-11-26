@@ -18,6 +18,12 @@ object ImageUtil {
 
     private const val UA = "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
+    /** QQ 官方下载域名对非 QQ UA 容易挂住不返回，优先用 QQBot UA */
+    private const val UA_QQ = "QQBot/1.0 (Android 12)"
+
+    /** 单张图总耗时上限，超过立即放弃，避免阻塞消息线程 */
+    private const val TOTAL_TIMEOUT_MS = 8000L
+
     /** 单张图最大边长，超过就等比缩放；控制 token 与传输体积 */
     private const val MAX_SIDE = 1280
 
@@ -51,19 +57,52 @@ object ImageUtil {
     }
 
     private fun download(url: String): ByteArray? {
+        // 用独立线程 + 总超时兜底，防止 QQ 图片域名挂住不返回拖死消息线程
+        val task = java.util.concurrent.FutureTask<ByteArray?> { downloadInner(url) }
+        val th = Thread(task, "img-dl")
+        th.isDaemon = true
+        th.start()
+        return try {
+            task.get(TOTAL_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            Logger.w("Img", "下载超时 ${TOTAL_TIMEOUT_MS}ms，放弃")
+            runCatching { task.cancel(true) }
+            runCatching { th.interrupt() }
+            null
+        } catch (e: Exception) {
+            Logger.w("Img", "下载异常: ${e.message}")
+            null
+        }
+    }
+
+    /** 依次尝试 QQBot UA 与浏览器 UA，任一成功即返回 */
+    private fun downloadInner(url: String): ByteArray? {
+        for (ua in listOf(UA_QQ, UA)) {
+            val data = tryOnce(url, ua)
+            if (data != null) return data
+        }
+        return null
+    }
+
+    private fun tryOnce(url: String, ua: String): ByteArray? {
         var conn: HttpURLConnection? = null
         return try {
             conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 15000
-                readTimeout = 30000
+                connectTimeout = 5000
+                readTimeout = 6000
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", UA)
+                setRequestProperty("User-Agent", ua)
                 setRequestProperty("Accept", "image/*,*/*")
             }
             val code = conn.responseCode
             if (code !in 200..299) {
-                Logger.w("Img", "下载失败 HTTP $code")
+                Logger.w("Img", "下载失败 HTTP $code (ua=${ua.take(8)})")
+                return null
+            }
+            val ct = conn.contentType ?: ""
+            if (ct.isNotEmpty() && !ct.startsWith("image/") && !ct.contains("octet-stream")) {
+                Logger.w("Img", "返回非图片类型: $ct")
                 return null
             }
             val data = conn.inputStream.use { it.readBytes() }
@@ -71,9 +110,13 @@ object ImageUtil {
                 Logger.w("Img", "图片过大 ${data.size / 1024 / 1024}MB，跳过")
                 return null
             }
+            if (data.isEmpty()) {
+                Logger.w("Img", "下载到空数据")
+                return null
+            }
             data
         } catch (e: Exception) {
-            Logger.w("Img", "下载异常: ${e.message}")
+            Logger.w("Img", "下载异常(${ua.take(8)}): ${e.message}")
             null
         } finally {
             runCatching { conn?.disconnect() }
