@@ -3,6 +3,7 @@ package com.ajx.botforge.ui
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Switch
+import com.ajx.botforge.R
 import com.ajx.botforge.data.Config
 
 class GroupListActivity : BaseActivity() {
@@ -14,7 +15,7 @@ class GroupListActivity : BaseActivity() {
         val bot = Config.loadBots().firstOrNull { it.id == botId }
         if (bot == null) {
             title("群管理")
-            add(text("机器人不存在", 13f, 0xFF999999.toInt()), 12)
+            add(text("机器人不存在", 13f, color(R.color.t_low)), 12)
             return
         }
         title("群管理", "机器人在哪些群说话、是否需要 @、冷却几秒")
@@ -26,7 +27,7 @@ class GroupListActivity : BaseActivity() {
                 text(
                     "还没有群。先在群里 @ 机器人发一句话，日志里会打印 " +
                             "「未配置的群 <openid>，忽略」，把那个 openid 填进来即可。",
-                    13f, 0xFF999999.toInt()
+                    13f, color(R.color.t_low)
                 ), 16
             )
             return
@@ -34,12 +35,12 @@ class GroupListActivity : BaseActivity() {
 
         bot.groups.forEach { g ->
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            box.addView(text(g.note.ifBlank { g.groupOpenId }, 15f, 0xFF111111.toInt()))
-            box.addView(text(g.groupOpenId, 11f, 0xFF999999.toInt()))
+            box.addView(text(g.note.ifBlank { g.groupOpenId }, 15f, color(R.color.t_hi)))
+            box.addView(text(g.groupOpenId, 11f, color(R.color.t_low)))
             box.addView(
                 text(
                     "${if (g.enabled) "启用" else "禁用"} · ${if (g.requireAt) "需要@" else "自由发言"} · 冷却 ${g.cooldownSec}s",
-                    12f, 0xFF666666.toInt()
+                    12f, color(R.color.t_mid)
                 )
             )
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -67,7 +68,7 @@ class GroupListActivity : BaseActivity() {
     private fun editGroup(exist: Config.GroupCfg?) {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(8), dp(16), 0)
+            setPadding(dpNum(16), dpNum(8), dpNum(16), 0)
         }
         val openIdEt: EditText = input("group_openid", exist?.groupOpenId ?: "")
         val noteEt: EditText = input("备注，例如：测试群", exist?.note ?: "")
@@ -75,11 +76,11 @@ class GroupListActivity : BaseActivity() {
         val enabledSw = Switch(this).apply { isChecked = exist?.enabled ?: true; text = "启用" }
         val atSw = Switch(this).apply { isChecked = exist?.requireAt ?: false; text = "需要 @" }
 
-        box.addView(text("group_openid", 12f, 0xFF666666.toInt()))
+        box.addView(text("group_openid", 12f, color(R.color.t_mid)))
         box.addView(openIdEt)
-        box.addView(text("备注", 12f, 0xFF666666.toInt()))
+        box.addView(text("备注", 12f, color(R.color.t_mid)))
         box.addView(noteEt)
-        box.addView(text("冷却（秒）", 12f, 0xFF666666.toInt()))
+        box.addView(text("冷却（秒）", 12f, color(R.color.t_mid)))
         box.addView(coolEt)
         box.addView(enabledSw)
         box.addView(atSw)

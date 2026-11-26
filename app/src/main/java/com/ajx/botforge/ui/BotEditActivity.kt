@@ -2,6 +2,7 @@ package com.ajx.botforge.ui
 
 import android.widget.EditText
 import android.widget.Switch
+import com.ajx.botforge.R
 import com.ajx.botforge.data.Config
 
 class BotEditActivity : BaseActivity() {
@@ -32,7 +33,7 @@ class BotEditActivity : BaseActivity() {
         label("私域 Intents")
         val intentsEt = input("1174409216", (exist?.intents ?: 1174409216L).toString())
         add(intentsEt)
-        add(text("默认 1174409216：群聊@+私聊+群全量。若只收 @ 消息可改 1174405120。", 12f, 0xFF999999.toInt()), 4)
+        add(text("默认 1174409216：群聊@+私聊+群全量。若只收 @ 消息可改 1174405120。", 12f, color(R.color.t_low)), 4)
 
         label("启用")
         enabledSw = Switch(this).apply { isChecked = exist?.enabled ?: true }

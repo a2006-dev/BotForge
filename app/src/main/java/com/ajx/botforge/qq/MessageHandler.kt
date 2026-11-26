@@ -8,6 +8,8 @@ import com.ajx.botforge.ai.Memory
 import com.ajx.botforge.ai.WebSearch
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
+import com.ajx.botforge.ai.tool.AgentLoop
+import com.ajx.botforge.ai.tool.BuiltinTools
 import com.ajx.botforge.plugin.PluginGuard
 import com.ajx.botforge.plugin.PluginRegistry
 import com.ajx.botforge.plugin.PluginRunner
@@ -140,13 +142,37 @@ object MessageHandler {
             }
         }
 
-        // 调用（失败重试 1 次，仍失败则给出可见提示，不再静默 —— F6）
-        var answer = AiEngine.chat(
-            model, sb.toString(), history, userContent,
-            persona?.temperature ?: 0.8f,
-            persona?.maxTokens ?: model.maxTokens,
-            imagePayload
-        )
+        // 调用：有工具权限且无图时走 AgentLoop，否则走原路径
+        // （有图时模型更容易乱调工具，且多模态+工具混用部分反代支持不稳，故保守处理）
+        val useAgent = Config.agentEnabled && imagePayload.isEmpty() && botAllowedTools(bot, ev)
+        var answer: String? = null
+        var usedTools: List<String> = emptyList()
+
+        if (useAgent) {
+            val tools = BuiltinTools.all()
+            val r = AgentLoop.run(
+                model = model,
+                system = sb.toString(),
+                history = history,
+                user = userContent,
+                temperature = persona?.temperature ?: 0.8f,
+                maxTokens = persona?.maxTokens ?: model.maxTokens,
+                tools = tools,
+                onToolCall = { name, args ->
+                    PluginGuard.audit(ev.scene, ev.userOpenId, ev.groupOpenId, "tool:$name", true, args.toString())
+                }
+            )
+            answer = r?.text
+            usedTools = r?.usedTools ?: emptyList()
+        } else {
+            answer = AiEngine.chat(
+                model, sb.toString(), history, userContent,
+                persona?.temperature ?: 0.8f,
+                persona?.maxTokens ?: model.maxTokens,
+                imagePayload
+            )
+        }
+
         if (answer == null) {
             Logger.w("Msg", "模型无返回，1 秒后重试一次")
             Thread.sleep(1000)
@@ -162,6 +188,10 @@ object MessageHandler {
             Logger.w("Msg", "模型重试仍失败，回一条提示")
             reply(bot, ev, "（我这边模型没响应，稍后再发一次？）")
             return
+        }
+
+        if (usedTools.isNotEmpty()) {
+            Logger.i("Msg", "本轮调用工具: ${usedTools.joinToString()}")
         }
 
         Logger.i("Msg", "[${ev.scene}] ${ev.content.take(40)} → ${answer.take(40)}")
@@ -261,6 +291,14 @@ object MessageHandler {
             }
             else -> handlePlugin(bot, ev, text, cmd)
         }
+    }
+
+    /** 判断本次对话是否允许模型调用工具（L2 安全闸门） */
+    private fun botAllowedTools(bot: Config.Bot, ev: BotClient.Event): Boolean {
+        // 群聊里模型不能自主执行工具，只允许私聊
+        if (ev.scene != "c2c") return false
+        // 复用插件白名单：能被允许跑插件的人，才允许让 AI 调工具
+        return PluginGuard.check(ev.scene, ev.userOpenId, ev.groupOpenId) == null
     }
 
     /** 生成帮助文本，内置指令 + 当前场景可用的插件指令 */

@@ -1,55 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    BotForge 尺寸令牌（唯一来源）
-    - 间距使用 4dp 基准阶梯，禁止页面出现 13dp / 17dp 这类随意值。
-    - 字号统一用 sp，组件高度用 dp。
--->
+<!-- BotForge 尺寸令牌 · v2：只保留实际用到的刻度，避免定义一堆没人用的 -->
 <resources>
 
-    <!-- ===== 间距 ===== -->
-    <dimen name="spacing_xs">4dp</dimen>
-    <dimen name="spacing_sm">8dp</dimen>
-    <dimen name="spacing_md">12dp</dimen>
-    <dimen name="spacing_lg">16dp</dimen>
-    <dimen name="spacing_xl">24dp</dimen>
-    <dimen name="spacing_xxl">32dp</dimen>
+    <!-- 间距：4 的倍数 -->
+    <dimen name="s1">4dp</dimen>
+    <dimen name="s2">8dp</dimen>
+    <dimen name="s3">12dp</dimen>
+    <dimen name="s4">16dp</dimen>
+    <dimen name="s5">20dp</dimen>
+    <dimen name="s6">24dp</dimen>
+    <dimen name="s8">32dp</dimen>
 
-    <!-- 页面级留白 -->
-    <dimen name="screen_padding_h">18dp</dimen>
-    <dimen name="screen_padding_top">24dp</dimen>
-    <dimen name="screen_padding_bottom">28dp</dimen>
+    <!-- 圆角 -->
+    <dimen name="r_sm">8dp</dimen>
+    <dimen name="r_md">14dp</dimen>
+    <dimen name="r_lg">20dp</dimen>
+    <dimen name="r_full">999dp</dimen>
 
-    <!-- ===== 圆角 ===== -->
-    <dimen name="radius_sm">8dp</dimen>
-    <dimen name="radius_md">12dp</dimen>
-    <dimen name="radius_lg">16dp</dimen>
-    <dimen name="radius_pill">999dp</dimen>
+    <!-- 字号 -->
+    <dimen name="f_cap">11sp</dimen>
+    <dimen name="f_sm">12sp</dimen>
+    <dimen name="f_md">14sp</dimen>
+    <dimen name="f_lg">16sp</dimen>
+    <dimen name="f_xl">20sp</dimen>
+    <dimen name="f_hero">30sp</dimen>
 
-    <!-- ===== 字号 ===== -->
-    <dimen name="text_size_caption">11sp</dimen>
-    <dimen name="text_size_small">12sp</dimen>
-    <dimen name="text_size_label">13sp</dimen>
-    <dimen name="text_size_body">14sp</dimen>
-    <dimen name="text_size_body_large">15sp</dimen>
-    <dimen name="text_size_title">18sp</dimen>
-    <dimen name="text_size_heading">22sp</dimen>
-    <dimen name="text_size_display">28sp</dimen>
-
-    <!-- ===== 组件高度 / 尺寸 ===== -->
-    <dimen name="button_height">48dp</dimen>
-    <dimen name="button_height_sm">36dp</dimen>
-    <dimen name="input_height">48dp</dimen>
-    <dimen name="list_item_min_height">64dp</dimen>
-    <dimen name="status_dot_size">8dp</dimen>
-    <dimen name="icon_size_sm">18dp</dimen>
-    <dimen name="icon_size_md">24dp</dimen>
-
-    <!-- ===== 描边 ===== -->
-    <dimen name="border_width">1dp</dimen>
-    <dimen name="border_width_focused">2dp</dimen>
-
-    <!-- ===== 卡片 / 列表内边距 ===== -->
-    <dimen name="card_padding">14dp</dimen>
-    <dimen name="card_gap">8dp</dimen>
+    <!-- 组件 -->
+    <dimen name="h_btn">50dp</dimen>
+    <dimen name="h_btn_sm">38dp</dimen>
+    <dimen name="h_row">56dp</dimen>
+    <dimen name="dot">9dp</dimen>
+    <dimen name="hair">1dp</dimen>
 
 </resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 次按钮：深灰底 + 描边，避免在深色整体里显得是「系统默认灰块」 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/ink_4" />
+            <corners android:radius="@dimen/r_sm" />
+            <stroke android:width="@dimen/hair" android:color="@color/line_strong" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/ink_3" />
+            <corners android:radius="@dimen/r_sm" />
+            <stroke android:width="@dimen/hair" android:color="@color/line" />
+        </shape>
+    </item>
+</selector>

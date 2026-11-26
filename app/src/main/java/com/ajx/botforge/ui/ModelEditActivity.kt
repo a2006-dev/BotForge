@@ -1,6 +1,7 @@
 package com.ajx.botforge.ui
 
 import android.widget.EditText
+import com.ajx.botforge.R
 import com.ajx.botforge.data.Config
 
 class ModelEditActivity : BaseActivity() {
@@ -24,7 +25,7 @@ class ModelEditActivity : BaseActivity() {
             text(
                 "本机反代填 127.0.0.1:端口/v1；官方直连填官方地址；本地模型填局域网 IP。\n" +
                         "注意：本机反代若跑在电脑上，手机要用 192.168.x.x 而不是 127.0.0.1。",
-                12f, 0xFF999999.toInt()
+                12f, color(R.color.t_low)
             ), 4
         )
 

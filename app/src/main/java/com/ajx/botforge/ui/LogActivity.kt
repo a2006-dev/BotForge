@@ -1,8 +1,10 @@
 package com.ajx.botforge.ui
 
+import android.util.TypedValue
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import com.ajx.botforge.R
 import com.ajx.botforge.data.Logger
 import com.ajx.botforge.qq.BotManager
 import java.util.concurrent.Executors
@@ -30,13 +32,13 @@ class LogActivity : BaseActivity() {
         add(row, 10)
 
         logView = TextView(this).apply {
-            textSize = 11f
-            setTextColor(0xFF222222.toInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setTextColor(color(R.color.t_hi))
             setTextIsSelectable(true)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            setBackgroundColor(0xFFF7F8FA.toInt())
+            setPadding(dpNum(8), dpNum(8), dpNum(8), dpNum(8))
+            setBackgroundColor(color(R.color.ink_2))
         }
-        add(logView, 10, height = dp(520))
+        add(logView, 10, height = dpNum(520))
 
         render()
         pool.scheduleWithFixedDelay({

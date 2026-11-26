@@ -2,46 +2,57 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        BotForge 应用主题（深色）
-        - 使用 Dark 父主题，确保 Material 组件默认走深色分支（文字、弹窗、输入框）。
-        - 系统栏颜色与窗口底色统一为 bg_primary，避免启动闪白。
+        主题 · v2
+        v1 的问题：只改了窗口底色，系统控件（Button/Switch/EditText/Dialog）
+        仍按浅色分支绘制，导致白底白字、灰块按钮。
+        v2 用 Theme.AppCompat.NoActionBar（Dark 分支），并把所有会露白的地方
+        逐个显式指定。
     -->
     <style name="Theme.BotForge" parent="Theme.AppCompat.NoActionBar">
-        <item name="colorPrimary">@color/accent_primary</item>
-        <item name="colorPrimaryDark">@color/bg_primary</item>
-        <item name="colorAccent">@color/accent_primary</item>
-        <item name="android:colorBackground">@color/bg_primary</item>
 
-        <item name="android:windowBackground">@color/bg_primary</item>
-        <item name="android:statusBarColor">@color/bg_primary</item>
-        <item name="android:navigationBarColor">@color/bg_primary</item>
+        <!-- 品牌 -->
+        <item name="colorPrimary">@color/brand</item>
+        <item name="colorPrimaryDark">@color/ink_0</item>
+        <item name="colorAccent">@color/brand</item>
+        <item name="colorControlActivated">@color/brand</item>
+        <item name="colorControlNormal">@color/t_mid</item>
+        <item name="colorControlHighlight">@color/ink_4</item>
 
-        <!-- 深色底 → 系统栏图标用浅色 -->
+        <!-- 窗口与系统栏 -->
+        <item name="android:colorBackground">@color/ink_1</item>
+        <item name="android:windowBackground">@color/ink_1</item>
+        <item name="android:statusBarColor">@color/ink_0</item>
+        <item name="android:navigationBarColor">@color/ink_0</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">false</item>
 
-        <!-- 弹窗底色：跟随浮起层，避免纯黑突兀 -->
-        <item name="android:colorBackgroundFloating">@color/bg_elevated</item>
+        <!-- 弹窗 / 菜单 -->
+        <item name="android:colorBackgroundFloating">@color/ink_2</item>
+        <item name="android:textColorPrimary">@color/t_hi</item>
+        <item name="android:textColorSecondary">@color/t_mid</item>
+        <item name="android:textColorHint">@color/t_low</item>
+        <item name="android:textColorPrimaryInverse">@color/t_inverse</item>
 
-        <!-- 文本主体色，供 AlertDialog / 原生控件继承 -->
-        <item name="android:textColorPrimary">@color/text_primary</item>
-        <item name="android:textColorSecondary">@color/text_secondary</item>
-        <item name="android:textColorHint">@color/text_tertiary</item>
+        <!-- 分割线 -->
+        <item name="android:listDivider">@color/line</item>
     </style>
 
-    <!-- ============================================================
-         兼容别名
-         旧代码（XML）里可能引用 bg / card / accent / text_main 等名字，
-         这里统一映射到新令牌，避免引用断裂。
-         待所有页面迁移完成后可整块删除。
-         ============================================================ -->
-    <color name="bg">@color/bg_primary</color>
-    <color name="card">@color/bg_card</color>
-    <color name="accent">@color/accent_primary</color>
-    <color name="text_main">@color/text_primary</color>
-    <color name="text_sub">@color/text_secondary</color>
-    <color name="ok">@color/status_success</color>
-    <color name="warn">@color/status_warning</color>
-    <color name="err">@color/status_error</color>
+    <!-- AlertDialog 专用主题：确保弹窗底与文字都是深色方案 -->
+    <style name="Theme.BotForge.Dialog" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="colorAccent">@color/brand</item>
+        <item name="android:colorBackground">@color/ink_2</item>
+        <item name="android:textColorPrimary">@color/t_hi</item>
+        <item name="android:textColorSecondary">@color/t_mid</item>
+    </style>
+
+    <!-- 兼容别名：其它页面可能引用了旧名字 -->
+    <color name="bg">@color/ink_1</color>
+    <color name="card">@color/ink_2</color>
+    <color name="accent">@color/brand</color>
+    <color name="text_main">@color/t_hi</color>
+    <color name="text_sub">@color/t_mid</color>
+    <color name="ok">@color/run</color>
+    <color name="warn">@color/warn</color>
+    <color name="err">@color/danger</color>
 
 </resources>

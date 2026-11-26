@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 主按钮背景：强调色，含按下/禁用态 -->
+<!-- 主按钮：品牌蓝实心，含按下 / 禁用 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_enabled="false">
         <shape android:shape="rectangle">
-            <solid android:color="@color/accent_disabled" />
-            <corners android:radius="@dimen/radius_sm" />
+            <solid android:color="@color/brand_off" />
+            <corners android:radius="@dimen/r_sm" />
         </shape>
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/accent_pressed" />
-            <corners android:radius="@dimen/radius_sm" />
+            <solid android:color="@color/brand_press" />
+            <corners android:radius="@dimen/r_sm" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/accent_primary" />
-            <corners android:radius="@dimen/radius_sm" />
+            <solid android:color="@color/brand" />
+            <corners android:radius="@dimen/r_sm" />
         </shape>
     </item>
 </selector>

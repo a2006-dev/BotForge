@@ -302,6 +302,11 @@ object Config {
         get() = sp.getString("search_trigger", "model") ?: "model"
         set(v) = sp.edit().putString("search_trigger", v).apply()
 
+    /** L2：是否允许模型自主调用工具（默认关闭，需要用户显式开启） */
+    var agentEnabled: Boolean
+        get() = sp.getBoolean("agent_enabled", false)
+        set(v) = sp.edit().putBoolean("agent_enabled", v).apply()
+
     var logEnabled: Boolean
         get() = sp.getBoolean("log_enabled", true)
         set(v) = sp.edit().putBoolean("log_enabled", v).apply()

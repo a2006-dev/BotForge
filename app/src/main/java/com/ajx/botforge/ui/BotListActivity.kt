@@ -3,6 +3,7 @@ package com.ajx.botforge.ui
 import android.content.Intent
 import android.view.View
 import android.widget.LinearLayout
+import com.ajx.botforge.R
 import com.ajx.botforge.data.Config
 
 class BotListActivity : BaseActivity() {
@@ -15,14 +16,14 @@ class BotListActivity : BaseActivity() {
 
         val list = Config.loadBots()
         if (list.isEmpty()) {
-            add(text("还没有机器人，点上面新建。", 13f, 0xFF999999.toInt()), 20)
+            add(text("还没有机器人，点上面新建。", 13f, color(R.color.t_low)), 20)
             return
         }
         list.forEach { b ->
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            box.addView(text(b.name.ifBlank { "未命名" }, 16f, 0xFF111111.toInt()))
-            box.addView(text("AppID ${b.appId}  ·  ${if (b.enabled) "已启用" else "已禁用"}", 12f, 0xFF888888.toInt()))
-            box.addView(text("群 ${b.groups.size} 个", 12f, 0xFF888888.toInt()))
+            box.addView(text(b.name.ifBlank { "未命名" }, 16f, color(R.color.t_hi)))
+            box.addView(text("AppID ${b.appId}  ·  ${if (b.enabled) "已启用" else "已禁用"}", 12f, color(R.color.t_mid)))
+            box.addView(text("群 ${b.groups.size} 个", 12f, color(R.color.t_mid)))
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             row.addView(button("编辑") {
                 startActivity(

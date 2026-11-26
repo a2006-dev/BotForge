@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 状态胶囊底色，四态共用结构，只换颜色 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/run_bg" />
+    <corners android:radius="@dimen/r_full" />
+</shape>

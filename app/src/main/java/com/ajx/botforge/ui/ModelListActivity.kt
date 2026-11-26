@@ -4,6 +4,7 @@ import android.content.Intent
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import com.ajx.botforge.ai.AiEngine
+import com.ajx.botforge.R
 import com.ajx.botforge.data.Config
 import java.util.concurrent.Executors
 
@@ -19,14 +20,14 @@ class ModelListActivity : BaseActivity() {
 
         val list = Config.loadModels()
         if (list.isEmpty()) {
-            add(text("还没有模型配置。", 13f, 0xFF999999.toInt()), 16)
+            add(text("还没有模型配置。", 13f, color(R.color.t_low)), 16)
             return
         }
         list.forEach { m ->
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            box.addView(text(m.name.ifBlank { m.model }, 15f, 0xFF111111.toInt()))
-            box.addView(text("${m.model}  ·  ${m.type}", 12f, 0xFF888888.toInt()))
-            box.addView(text(m.baseUrl, 11f, 0xFF999999.toInt()))
+            box.addView(text(m.name.ifBlank { m.model }, 15f, color(R.color.t_hi)))
+            box.addView(text("${m.model}  ·  ${m.type}", 12f, color(R.color.t_mid)))
+            box.addView(text(m.baseUrl, 11f, color(R.color.t_low)))
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             row.addView(button("测试") { test(m) })
             row.addView(button("编辑") {

@@ -2,6 +2,7 @@ package com.ajx.botforge.ui
 
 import android.content.Intent
 import android.widget.LinearLayout
+import com.ajx.botforge.R
 import com.ajx.botforge.data.Config
 
 class PersonaListActivity : BaseActivity() {
@@ -14,19 +15,19 @@ class PersonaListActivity : BaseActivity() {
 
         val list = Config.loadPersonas()
         if (list.isEmpty()) {
-            add(text("还没有人设。", 13f, 0xFF999999.toInt()), 16)
+            add(text("还没有人设。", 13f, color(R.color.t_low)), 16)
             return
         }
         list.forEach { p ->
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            box.addView(text(p.name.ifBlank { "未命名" }, 16f, 0xFF111111.toInt()))
+            box.addView(text(p.name.ifBlank { "未命名" }, 16f, color(R.color.t_hi)))
             box.addView(
                 text(
                     "记忆 ${if (p.memoryEnabled) "${p.memoryDepth} 条" else "关闭"} · 温度 ${p.temperature} · 上限 ${p.maxTokens} 字",
-                    12f, 0xFF888888.toInt()
+                    12f, color(R.color.t_mid)
                 )
             )
-            box.addView(text(p.prompt.take(70) + if (p.prompt.length > 70) "…" else "", 12f, 0xFF666666.toInt()))
+            box.addView(text(p.prompt.take(70) + if (p.prompt.length > 70) "…" else "", 12f, color(R.color.t_mid)))
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             row.addView(button("编辑") {
                 startActivity(Intent(this, PersonaEditActivity::class.java).putExtra("id", p.id))
