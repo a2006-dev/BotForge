@@ -186,13 +186,23 @@ object PluginRegistry {
             """
             #!/system/bin/sh
             echo "=== 电量 ==="
-            dumpsys battery 2>/dev/null | grep -E 'level|status' | head -2
+            LV=$(dumpsys battery 2>/dev/null | grep -m1 '^  level: ' | grep -oE '[0-9]+')
+            ST=$(dumpsys battery 2>/dev/null | grep -m1 '^  status: ' | grep -oE '[0-9]+')
+            case "${'$'}ST" in
+              2) STDESC="充电中" ;;
+              3) STDESC="放电中" ;;
+              5) STDESC="已充满" ;;
+              *) STDESC="状态 ${'$'}ST" ;;
+            esac
+            echo "电量 ${'$'}{LV:--}%  (${'$'}STDESC)"
+
             echo
             echo "=== 内存 ==="
-            free -h 2>/dev/null || cat /proc/meminfo | head -3
+            free -h 2>/dev/null | head -2
+
             echo
             echo "=== 存储 ==="
-            df -h /data 2>/dev/null | tail -1
+            df -h /data 2>/dev/null | tail -1 | awk '{print "已用 " $3 " / 共 " $2 "  (剩余 " $4 ")"}'
             """.trimIndent()
         )
     }
