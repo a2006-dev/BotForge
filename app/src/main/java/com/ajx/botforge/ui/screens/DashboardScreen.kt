@@ -1,6 +1,7 @@
 package com.ajx.botforge.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,13 +12,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,35 +28,53 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ajx.botforge.data.Logger
 import com.ajx.botforge.permission.PermissionGuide
-import com.ajx.botforge.qq.BotManager
-import com.ajx.botforge.qq.BotStatusRegistry
+import com.ajx.botforge.qq.BotConnState
+import com.ajx.botforge.qq.BotConnectionState
 import com.ajx.botforge.ui.components.PrimaryButton
 import com.ajx.botforge.ui.components.SecondaryButton
-import com.ajx.botforge.ui.components.SectionHeader
-import com.ajx.botforge.ui.components.StatusDot
-import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.data.BotForgeRepository
+import com.ajx.botforge.ui.data.DashboardStore
 import com.ajx.botforge.ui.theme.Bg0
 import com.ajx.botforge.ui.theme.Bg1
 import com.ajx.botforge.ui.theme.Bg2
 import com.ajx.botforge.ui.theme.Bg3
 import com.ajx.botforge.ui.theme.Brand
+import com.ajx.botforge.ui.theme.Danger
 import com.ajx.botforge.ui.theme.FontSize
+import com.ajx.botforge.ui.theme.Line
+import com.ajx.botforge.ui.theme.LineStrong
+import com.ajx.botforge.ui.theme.Success
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
 import com.ajx.botforge.ui.theme.TextHigh
 import com.ajx.botforge.ui.theme.TextLow
 import com.ajx.botforge.ui.theme.TextMid
-import kotlinx.coroutines.flow.MutableStateFlow
+import com.ajx.botforge.ui.theme.Warning
 
 /**
- * 首页仪表盘。
- * 只展示真实可计算的数据：机器人数量与启用数、人设数、模型数、服务状态、最近日志条数。
- * 不虚构任何“健康度”“成功率”之类的假指标。
+ * 首页 —— 机器人运行管理中心
+ *
+ * 按任务书第一节整改：重新梳理信息层级，优先展示
+ * 服务状态 / 真实在线机器人 / 运行异常，并增加最近运行事件。
+ *
+ * 信息层级（从上到下，重要度递减）：
+ *   1. 品牌区      BotForge + 一句话概括（在线数如实反映连接层）
+ *   2. 服务状态区  前台服务存活 + 主操作按钮（唯一主操作）
+ *   3. 连接状态区  每个机器人的真实 WebSocket 状态（不是"配置了几个"）
+ *   4. 运行异常    仅在出错时出现，避免常态占位
+ *   5. 最近事件    真实日志尾部，让用户看到"刚才发生了什么"
+ *   6. 数据统计    人设/模型/日志条数
+ *   7. 功能入口    按"管理 / 运维 / 关于"分组
+ *
+ * 所有数字都来自 BotManager / BotStatusRegistry / Config / Logger，
+ * 没有任何虚构指标（不编造成功率、健康度之类的数字）。
  */
 @Composable
 fun DashboardScreen(
@@ -65,60 +85,41 @@ fun DashboardScreen(
     onOpenSettings: () -> Unit,
     onOpenPlugins: () -> Unit,
     onOpenAbout: () -> Unit,
-    /** 启动/停止前台服务；传 null 表示由上层提供原生实现 */
+    /** 启动/停止前台服务 */
     onToggleService: () -> Unit = {},
     /** 补齐通知 / 悬浮窗 / 电池白名单权限 */
     onRequestPermissions: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val repo = remember { BotForgeRepository() }
-    var personaCount by remember { mutableStateOf(0) }
-    var modelCount by remember { mutableStateOf(0) }
-    var logCount by remember { mutableStateOf(0) }
-    var serviceText by remember { mutableStateOf("-") }
-    var runningCount by remember { mutableStateOf(0) }
-    var serviceRunning by remember { mutableStateOf(false) }
+
+    // 唯一状态源：服务存活 + 连接层聚合 + 每机器人快照 + 真实事件
+    val state by DashboardStore.state.collectAsStateWithLifecycle()
+
     var toast by remember { mutableStateOf<String?>(null) }
-    // 权限状态：只有真的检查过系统才显示提示条，不做假数据
     var permStatus by remember { mutableStateOf<PermissionGuide.Status?>(null) }
 
-    // 真实的连接状态：由 BotStatusRegistry 推送，StateFlow 驱动 UI 刷新。
-    // 初版这里只在 LaunchedEffect(Unit) 里读一次快照，之后永不更新，
-    // 且 runningCount 取的是「配置数量」而非在线数，于是网关早断、
-    // 界面仍显示「运行中 · N 个连接」。这是任务书第三节的虚假状态。
-    val connState = remember { MutableStateFlow(BotManager.summary()) }
-    val summary by connState.collectAsStateWithLifecycle()
-
+    // 订阅连接层推送（幂等）。页面重建后不会丢事件，因为 Store 是进程单例。
     LaunchedEffect(Unit) {
-        personaCount = repo.personas().size
-        modelCount = repo.models().size
-        logCount = repo.logs().size
-        serviceText = repo.serviceStatus()
-        runningCount = repo.runningCount()
-        serviceRunning = repo.isServiceRunning()
-        // 订阅连接层推送，任何状态变化都立刻反映到首页
-        connState.value = BotManager.summary()
-        BotStatusRegistry.listener = { connState.value = BotManager.summary() }
+        DashboardStore.install()
+        DashboardStore.refreshAll()
         permStatus = PermissionGuide.status(context)
     }
 
-    DisposableEffect(Unit) {
-        onDispose { BotStatusRegistry.listener = null }
-    }
-
-    // 日志条数与服务存活随运行变化，做一次轻量轮询即可（不涉及连接状态）
+    // 服务存活、配置数量、日志需要轮询（这些没有推送源）；
+    // 连接状态由 BotStatusRegistry 推送，不依赖轮询。
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(3000)
-            logCount = repo.logs().size
-            serviceText = repo.serviceStatus()
-            serviceRunning = repo.isServiceRunning()
-            // 用户可能刚从设置页回来，权限状态跟着刷新
+            DashboardStore.refreshAll()
             permStatus = PermissionGuide.status(context)
         }
     }
 
-    // toast 自动消失，避免常驻遮挡
+    // 离开页面时不解除订阅：DashboardStore 是进程单例，
+    // 保留已积累的失败/重连事件，返回首页时能立刻看到刚才发生了什么。
+    // 真正需要清理时由 App 退出统一处理。
+
     LaunchedEffect(toast) {
         if (toast != null) {
             kotlinx.coroutines.delay(2600)
@@ -126,250 +127,478 @@ fun DashboardScreen(
         }
     }
 
-    /**
-     * 启停服务
-     *
-     * 这里是首页唯一的主操作。之前整个 App 只有旧 Activity 里有启停入口，
-     * 迁移到 Compose 后链路断掉，用户能看状态却无法启动 —— 这是功能缺口，不是设计。
-     */
     fun toggle() {
-        if (serviceRunning) {
+        if (state.serviceRunning) {
             repo.stopService(context)
-            serviceRunning = false
-            serviceText = repo.serviceStatus()
+            DashboardStore.syncService(false)
             toast = "已停止服务"
         } else {
             val reason = repo.startService(context)
             if (reason != null) {
                 toast = reason
             } else {
-                serviceRunning = true
-                serviceText = repo.serviceStatus()
+                DashboardStore.syncService(true)
                 toast = "已启动，正在连接 QQ 网关…"
             }
         }
-        // 立刻刷新一次聚合状态，不必等 3 秒轮询
-        connState.value = BotManager.summary()
+        DashboardStore.refreshBots()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Bg1)
-            .verticalScroll(rememberScrollState())
-    ) {
-        // 顶部品牌区
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Bg0)
-                .padding(horizontal = Spacing.lg, vertical = Spacing.lg)
+                .fillMaxSize()
+                .background(Bg1)
+                .verticalScroll(rememberScrollState())
         ) {
-            Text(
-                text = "BotForge",
-                color = TextHigh,
-                fontSize = FontSize.display,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(Spacing.xxs))
-            Text(
-                text = "QQ 官方机器人工作台",
-                color = TextLow,
-                fontSize = FontSize.small
-            )
-            Spacer(Modifier.height(Spacing.md))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // 状态点颜色严格跟随连接状态，不再用「配置数量 > 0」冒充在线
-                StatusDot(
-                    tone = when {
-                        summary.loaded == 0 -> StatusTone.Neutral
-                        summary.online == summary.loaded -> StatusTone.Success
-                        summary.online > 0 -> StatusTone.Warning
-                        summary.reconnecting > 0 || summary.connecting > 0 -> StatusTone.Warning
-                        summary.error > 0 -> StatusTone.Danger
-                        else -> StatusTone.Neutral
-                    },
-                    size = Sizes.dot
-                )
-                Spacer(Modifier.width(Spacing.sm))
+            // ---------- 1. 品牌区 ----------
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Bg0)
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.xl)
+            ) {
                 Text(
-                    text = if (summary.loaded > 0) summary.text else serviceText,
+                    text = "BotForge",
+                    color = TextHigh,
+                    fontSize = FontSize.display,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(Spacing.xxs))
+                Text(
+                    text = summaryLine(state.serviceRunning, state.summary.loaded, state.summary.online, state.summary.hasAny),
                     color = TextMid,
                     fontSize = FontSize.small
                 )
             }
 
-            // 主操作：启动 / 停止
-            //
-            // 放在状态下面而不是藏进设置里 —— 这是整个 App 最主要的动作，
-            // 用户打开首页第一件事就是让机器人跑起来。
-            Spacer(Modifier.height(Spacing.md))
-            if (serviceRunning) {
-                SecondaryButton(
-                    text = "停止服务",
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { toggle() }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.lg)
+            ) {
+                // ---------- 2. 服务状态区 ----------
+                ServicePanel(
+                    running = state.serviceRunning,
+                    onToggle = { toggle() }
                 )
-            } else {
-                PrimaryButton(
-                    text = "启动服务",
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { toggle() }
-                )
-            }
-            Spacer(Modifier.height(Spacing.xs))
-            Text(
-                text = if (serviceRunning) {
-                    "前台服务运行中，退出界面也不会断开"
-                } else {
-                    "启动后会建立 QQ 网关长连接，状态实时显示"
-                },
-                color = TextLow,
-                fontSize = FontSize.micro
-            )
 
-            // 权限缺失提示条。
-            //
-            // 这三项权限在 Manifest 里声明了，但旧代码从不主动申请：
-            //  - 通知被关 → 前台服务通知不可见 → 进程降优先级 → 后台容易被冻结断连
-            //  - 悬浮窗被关 → addView 直接 BadTokenException，保活悬浮窗完全失效
-            //  - 电池白名单没加 → 熄屏后进程被系统回收
-            // 缺任何一项都在这里显式提示，并提供一键跳转修复。
-            val ps = permStatus
-            if (ps != null && !ps.allGood) {
-                Spacer(Modifier.height(Spacing.sm))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Bg3, RoundedCornerShape(Radius.md))
-                        .padding(Spacing.sm)
-                ) {
-                    Text(
-                        text = "权限未补齐，可能影响后台保活",
-                        color = TextHigh,
-                        fontSize = FontSize.small,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(Modifier.height(Spacing.xxs))
-                    Text(
+                // 权限未补齐时提示（依附在状态区之后，不抢占主操作位置）
+                val ps = permStatus
+                if (ps != null && !ps.allGood) {
+                    PermissionNotice(
                         text = PermissionGuide.missingText(ps),
-                        color = TextLow,
-                        fontSize = FontSize.micro
-                    )
-                    Spacer(Modifier.height(Spacing.sm))
-                    SecondaryButton(
-                        text = "立即补齐权限",
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
+                        onFix = {
                             onRequestPermissions()
                             permStatus = PermissionGuide.status(context)
                         }
                     )
                 }
+
+                // ---------- 3. 连接状态区 ----------
+                // 只在服务启动后才有意义；未启动时显示"未启动"而不是一排 0
+                if (state.serviceRunning || state.bots.isNotEmpty()) {
+                    SectionTitle("连接状态")
+                    if (state.bots.isEmpty()) {
+                        HintRow("等待机器人加载…")
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            state.bots.forEach { bot -> BotCard(bot) }
+                        }
+                    }
+                }
+
+                // ---------- 4. 运行异常（有才显示） ----------
+                if (state.hasAbnormal) {
+                    SectionTitle("运行异常")
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        state.abnormalBots.forEach { bot ->
+                            AbnormalRow(bot)
+                        }
+                        if (state.abnormalBots.isEmpty() && state.summary.error > 0) {
+                            HintRow("${state.summary.error} 个机器人处于异常状态，详见运行日志")
+                        }
+                    }
+                }
+
+                // ---------- 5. 最近运行事件 ----------
+                SectionTitle("最近运行事件")
+                EventList(
+                    events = state.events,
+                    onOpenLogs = onOpenLogs
+                )
+
+                // ---------- 6. 数据统计 ----------
+                SectionTitle("数据")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    StatTile(
+                        label = "人设",
+                        value = "${state.personaCount}",
+                        sub = "条",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatTile(
+                        label = "模型",
+                        value = "${state.modelCount}",
+                        sub = "个",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatTile(
+                        label = "日志",
+                        value = "${state.logTotal}",
+                        sub = "条",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // ---------- 7. 功能入口 ----------
+                SectionTitle("管理")
+                EntryGroup {
+                    EntryRow("机器人配置", "AppID、密钥、群白名单", onOpenBots)
+                    Divider()
+                    EntryRow("人设", "提示词、语气、记忆深度", onOpenPersonas)
+                    Divider()
+                    EntryRow("模型", "接口地址、密钥、超时", onOpenModels)
+                }
+
+                SectionTitle("运维")
+                EntryGroup {
+                    EntryRow("运行日志", "${state.logTotal} 条记录", onOpenLogs)
+                    Divider()
+                    EntryRow("插件", "查看已加载插件", onOpenPlugins)
+                    Divider()
+                    EntryRow("设置", "全局开关与保活配置", onOpenSettings)
+                }
+
+                SectionTitle("关于")
+                EntryGroup {
+                    EntryRow("关于 BotForge", "版本与项目信息", onOpenAbout)
+                }
+
+                Spacer(Modifier.height(Spacing.huge))
             }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md)
-        ) {
-            // 统计条
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                StatTile(
-                    label = "在线",
-                    value = "${summary.online}/${summary.loaded}",
-                    sub = if (summary.loaded == 0) "未启动" else "运行中 / 已加载",
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    label = "人设",
-                    value = "$personaCount",
-                    sub = "条",
-                    modifier = Modifier.weight(1f)
-                )
-                StatTile(
-                    label = "模型",
-                    value = "$modelCount",
-                    sub = "个",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            SectionHeader("管理")
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                EntryRow("机器人配置", "AppID、密钥、群白名单") { onOpenBots() }
-                EntryRow("人设", "提示词、语气、记忆深度") { onOpenPersonas() }
-                EntryRow("模型", "接口地址、密钥、超时") { onOpenModels() }
-            }
-
-            SectionHeader("运维")
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                EntryRow("运行日志", "$logCount 条记录") { onOpenLogs() }
-                EntryRow("插件", "查看已加载插件") { onOpenPlugins() }
-                EntryRow("设置", "全局开关与服务保活") { onOpenSettings() }
-            }
-
-            SectionHeader("关于")
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                EntryRow("关于 BotForge", "版本与项目信息") { onOpenAbout() }
-            }
-
-            Spacer(Modifier.height(Spacing.lg))
-        }
-    }
-
-    // 轻量 toast：只用 Compose 绘制，不依赖 Activity 的 Toast，
-    // 这样在任何宿主里都能显示启动失败的具体原因。
-    toast?.let { msg ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(Spacing.lg),
-            contentAlignment = Alignment.BottomCenter
-        ) {
+        // Compose 内绘制的 toast，不依赖 Activity，任何宿主都能提示启动失败原因
+        toast?.let { msg ->
             Box(
                 modifier = Modifier
-                    .background(Bg3, RoundedCornerShape(Radius.md))
-                    .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+                    .fillMaxSize()
+                    .padding(Spacing.lg),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Text(
-                    text = msg,
-                    color = TextHigh,
-                    fontSize = FontSize.small
-                )
+                Box(
+                    modifier = Modifier
+                        .background(Bg3, RoundedCornerShape(Radius.md))
+                        .border(Sizes.hairline, LineStrong, RoundedCornerShape(Radius.md))
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+                ) {
+                    Text(text = msg, color = TextHigh, fontSize = FontSize.small)
+                }
             }
         }
     }
 }
+
+// ---------------------------------------------------------------- 子组件
+
+/** 品牌区副标题：一句话说清当前处于什么阶段，全部基于真实计数 */
+private fun summaryLine(serviceRunning: Boolean, loaded: Int, online: Int, hasAny: Boolean): String {
+    if (!serviceRunning) return "前台服务未启动"
+    if (loaded == 0) return "服务运行中 · 暂无启用机器人"
+    if (!hasAny) return "服务运行中 · 等待连接"
+    return "服务运行中 · $online/$loaded 在线"
+}
+
+/** 服务状态面板：存活指示 + 主操作按钮（整个 App 最主要的动作） */
+@Composable
+private fun ServicePanel(running: Boolean, onToggle: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
+            .padding(Spacing.md)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(Sizes.dot)
+                    .background(if (running) Success else TextLow, CircleShape)
+            )
+            Spacer(Modifier.width(Spacing.sm))
+            Text(
+                text = if (running) "前台服务运行中" else "前台服务已停止",
+                color = TextHigh,
+                fontSize = FontSize.body,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Spacer(Modifier.height(Spacing.xs))
+        Text(
+            text = if (running) {
+                "退出界面不会断开；熄屏后依赖保活配置"
+            } else {
+                "启动后建立 QQ 网关长连接"
+            },
+            color = TextLow,
+            fontSize = FontSize.micro
+        )
+        Spacer(Modifier.height(Spacing.md))
+        if (running) {
+            SecondaryButton(
+                text = "停止服务",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onToggle
+            )
+        } else {
+            PrimaryButton(
+                text = "启动服务",
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onToggle
+            )
+        }
+    }
+}
+
+/** 单个机器人的连接卡片：状态、在线时长、心跳、ACK、重连次数 */
+@Composable
+private fun BotCard(bot: BotConnectionState) {
+    val (toneColor, toneLabel) = when (bot.state) {
+        BotConnState.CONNECTED -> Success to "在线"
+        BotConnState.CONNECTING -> Warning to "连接中"
+        BotConnState.AUTHENTICATING -> Warning to "鉴权中"
+        BotConnState.RECONNECTING -> Warning to "重连中"
+        BotConnState.ERROR -> Danger to "异常"
+        BotConnState.STOPPED -> TextLow to "已停止"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
+            .padding(Spacing.md)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(Sizes.dot)
+                    .background(toneColor, CircleShape)
+            )
+            Spacer(Modifier.width(Spacing.sm))
+            Text(
+                text = bot.botName.ifEmpty { bot.botId },
+                color = TextHigh,
+                fontSize = FontSize.body,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(text = toneLabel, color = toneColor, fontSize = FontSize.caption)
+        }
+
+        Spacer(Modifier.height(Spacing.sm))
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.lg)) {
+            MiniStat("心跳", heartbeatText(bot.heartbeatInterval))
+            MiniStat("ACK", bot.ackLatencyText())
+            MiniStat("重连", "${bot.reconnectCount}")
+        }
+
+        // 代次与连接时刻：排查问题时的关键线索，平时不喧宾夺主
+        if (bot.generation > 0) {
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                text = "第 ${bot.generation} 代连接" +
+                        if (bot.connectedAt > 0) " · " + clockText(bot.connectedAt) + " 上线" else "",
+                color = TextLow,
+                fontSize = FontSize.micro
+            )
+        }
+    }
+}
+
+/** 异常行：错误原因直接展示，不需要点进日志 */
+@Composable
+private fun AbnormalRow(bot: BotConnectionState) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bg2, RoundedCornerShape(Radius.md))
+            .border(Sizes.hairline, Danger.copy(alpha = 0.35f), RoundedCornerShape(Radius.md))
+            .padding(Spacing.md)
+    ) {
+        Text(
+            text = bot.botName.ifEmpty { bot.botId } + " · " + bot.state.label,
+            color = Danger,
+            fontSize = FontSize.small,
+            fontWeight = FontWeight.Medium
+        )
+        val err = bot.lastError
+        if (!err.isNullOrEmpty()) {
+            Spacer(Modifier.height(Spacing.xxs))
+            Text(
+                text = err,
+                color = TextMid,
+                fontSize = FontSize.micro,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/** 最近运行事件列表：来自 Logger 环形缓冲的真实日志尾部 */
+@Composable
+private fun EventList(events: List<Logger.Line>, onOpenLogs: () -> Unit) {
+    if (events.isEmpty()) {
+        HintRow("暂无运行记录")
+        return
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
+    ) {
+        events.forEachIndexed { index, line ->
+            if (index > 0) Divider()
+            EventRow(line)
+        }
+        Divider()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenLogs)
+                .padding(vertical = Spacing.sm),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = "查看全部日志 ›", color = Brand, fontSize = FontSize.small)
+        }
+    }
 }
 
 @Composable
-private fun StatTile(
-    label: String,
-    value: String,
-    sub: String,
-    modifier: Modifier = Modifier
-) {
+private fun EventRow(line: Logger.Line) {
+    val color = when (line.level) {
+        2 -> Danger
+        1 -> Warning
+        else -> TextMid
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = line.time,
+            color = TextLow,
+            fontSize = FontSize.micro,
+            fontFamily = FontFamily.Monospace
+        )
+        Spacer(Modifier.width(Spacing.sm))
+        Text(
+            text = line.text,
+            color = color,
+            fontSize = FontSize.micro,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun PermissionNotice(text: String, onFix: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bg3, RoundedCornerShape(Radius.md))
+            .padding(Spacing.md)
+    ) {
+        Text(
+            text = "权限未补齐",
+            color = Warning,
+            fontSize = FontSize.small,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(Modifier.height(Spacing.xxs))
+        Text(text = text, color = TextLow, fontSize = FontSize.micro)
+        Spacer(Modifier.height(Spacing.sm))
+        SecondaryButton(
+            text = "立即补齐权限",
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onFix
+        )
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        color = TextLow,
+        fontSize = FontSize.caption,
+        fontWeight = FontWeight.Medium
+    )
+}
+
+@Composable
+private fun HintRow(text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bg2, RoundedCornerShape(Radius.md))
+            .padding(Spacing.md)
+    ) {
+        Text(text = text, color = TextLow, fontSize = FontSize.small)
+    }
+}
+
+@Composable
+private fun MiniStat(label: String, value: String) {
+    Column {
+        Text(text = label, color = TextLow, fontSize = FontSize.micro)
+        Text(text = value, color = TextMid, fontSize = FontSize.small)
+    }
+}
+
+@Composable
+private fun StatTile(label: String, value: String, sub: String, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
-            .background(Bg2, RoundedCornerShape(com.ajx.botforge.ui.theme.Radius.lg))
+            .background(Bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
             .padding(Spacing.md)
     ) {
         Text(text = label, color = TextLow, fontSize = FontSize.caption)
         Spacer(Modifier.height(Spacing.xxs))
         Text(
             text = value,
-            color = if (label == "机器人" && value != "0") Brand else TextHigh,
-            fontSize = FontSize.metric,
+            color = TextHigh,
+            fontSize = FontSize.title,
             fontWeight = FontWeight.Bold
         )
-        Text(text = sub, color = TextMid, fontSize = FontSize.caption)
+        Text(text = sub, color = TextLow, fontSize = FontSize.micro)
+    }
+}
+
+@Composable
+private fun EntryGroup(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
+    ) {
+        content()
     }
 }
 
@@ -378,8 +607,7 @@ private fun EntryRow(title: String, subtitle: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(com.ajx.botforge.ui.theme.Radius.md))
-            .androidxClickable(onClick = onClick)
+            .clickable(onClick = onClick)
             .padding(horizontal = Spacing.md, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -390,12 +618,32 @@ private fun EntryRow(title: String, subtitle: String, onClick: () -> Unit) {
                 fontSize = FontSize.body,
                 fontWeight = FontWeight.Medium
             )
-            Text(text = subtitle, color = TextLow, fontSize = FontSize.caption)
+            Text(text = subtitle, color = TextLow, fontSize = FontSize.micro)
         }
         Text(text = "›", color = TextLow, fontSize = FontSize.title)
     }
 }
 
-/** 避免 import 冲突的 clickable 别名。 */
-private fun Modifier.androidxClickable(onClick: () -> Unit): Modifier =
-    this.then(Modifier.clickable(onClick = onClick))
+@Composable
+private fun Divider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Spacing.md)
+            .height(Sizes.hairline)
+            .background(Line)
+    )
+}
+
+// ---------------------------------------------------------------- 工具
+
+private fun heartbeatText(intervalMs: Long): String = when {
+    intervalMs <= 0L -> "—"
+    intervalMs % 1000L == 0L -> "${intervalMs / 1000}s"
+    else -> "${intervalMs}ms"
+}
+
+private fun clockText(epochMs: Long): String {
+    val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.CHINA)
+    return fmt.format(java.util.Date(epochMs))
+}
