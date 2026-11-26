@@ -1,8 +1,9 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
-        google()
+        // mavenCentral 优先：gradlePluginPortal 在 CI 上常被限流（429 Too Many Requests）
         mavenCentral()
+        google()
+        gradlePluginPortal()
     }
 }
 dependencyResolutionManagement {
@@ -12,6 +13,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-
 rootProject.name = "BotForge"
 include ':app'
