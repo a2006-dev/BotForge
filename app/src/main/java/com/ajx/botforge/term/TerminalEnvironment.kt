@@ -101,21 +101,22 @@ object TerminalEnvironment {
                     val tar = TarReader(gz)
                     var entry = tar.nextEntry()
                     while (entry != null) {
-                        val name = entry.name
+                        val e = entry ?: break
+                        val name = e.name
                         if (name.isNotEmpty() && !name.contains("..")) {
                             val out = File(dest, name)
                             when {
-                                entry.isDirectory -> out.mkdirs()
+                                e.isDirectory -> out.mkdirs()
 
-                                entry.isSymlink -> {
+                                e.isSymlink -> {
                                     out.parentFile?.mkdirs()
                                     runCatching {
                                         File(out.absolutePath).delete()
-                                        Os.symlink(entry.linkName, out.absolutePath)
+                                        Os.symlink(e.linkName, out.absolutePath)
                                     }
                                 }
 
-                                entry.isFile -> {
+                                e.isFile -> {
                                     out.parentFile?.mkdirs()
                                     FileOutputStream(out).use { fos ->
                                         unpacked += tar.copyBody(fos)

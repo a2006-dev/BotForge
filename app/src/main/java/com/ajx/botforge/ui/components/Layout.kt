@@ -37,6 +37,7 @@ import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
+import com.ajx.botforge.ui.theme.TextHigh
 import com.ajx.botforge.ui.theme.botColors
 
 /**
@@ -319,7 +320,7 @@ fun InfoRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    valueColor: androidx.compose.ui.graphics.Color = c.textHigh,
+        valueColor: androidx.compose.ui.graphics.Color = TextHigh,
     mono: Boolean = false
 ) {
     val c = botColors

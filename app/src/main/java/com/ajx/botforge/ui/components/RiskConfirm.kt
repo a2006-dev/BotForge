@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.components
 
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.clickable
 import com.ajx.botforge.ui.text.Txt
 
 import androidx.compose.foundation.background

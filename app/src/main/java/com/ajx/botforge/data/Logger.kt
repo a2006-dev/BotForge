@@ -12,6 +12,12 @@ object Logger {
     data class Line(val time: String, val level: Int, val text: String)
 
     private const val MAX = 600
+    /** 日志级别：信息。 */
+    const val LEVEL_INFO = 0
+    /** 日志级别：警告。 */
+    const val LEVEL_WARN = 1
+    /** 日志级别：错误。 */
+    const val LEVEL_ERROR = 2
     private val buf = ArrayDeque<Line>()
     private val fmt = SimpleDateFormat("HH:mm:ss", Locale.CHINA)
     private val dayFmt = SimpleDateFormat("MM-dd", Locale.CHINA)
@@ -19,9 +25,9 @@ object Logger {
     @Volatile
     var listener: ((Line) -> Unit)? = null
 
-    fun i(tag: String, msg: String) = add(0, tag, msg)
-    fun w(tag: String, msg: String) = add(1, tag, msg)
-    fun e(tag: String, msg: String) = add(2, tag, msg)
+    fun i(tag: String, msg: String) = add(LEVEL_INFO, tag, msg)
+    fun w(tag: String, msg: String) = add(LEVEL_WARN, tag, msg)
+    fun e(tag: String, msg: String) = add(LEVEL_ERROR, tag, msg)
 
     private fun add(level: Int, tag: String, msg: String) {
         val line = Line(fmt.format(Date()), level, "[$tag] $msg")

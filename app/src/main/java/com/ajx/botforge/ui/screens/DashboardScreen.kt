@@ -89,8 +89,6 @@ fun DashboardScreen(
     onOpenTerminal: () -> Unit,
     onOpenTools: () -> Unit,
     onOpenAbout: () -> Unit,
-    onOpenCapabilities: () -> Unit,
-    onOpenPermissions: () -> Unit,
     onToggleService: () -> Unit,
     onRequestPermissions: () -> Unit
 ) {
@@ -195,7 +193,7 @@ fun DashboardScreen(
 
             // ---------- 机器人卡片 ----------
             item {
-                SectionHeader("机器人 · ${state.bots.size}/${state.summary.total}")
+                SectionHeader("机器人 · ${state.bots.size}/${state.summary.loaded}")
             }
             if (state.bots.isEmpty()) {
                 item {
@@ -258,7 +256,7 @@ fun DashboardScreen(
                     )
                 }
             } else {
-                items(state.events, key = { it.time + it.level + it.tag + it.msg }) { line ->
+                items(state.events, key = { it.time + it.level + it.text }) { line ->
                     EventRow(line = line, onClick = onOpenLogs)
                 }
             }
@@ -271,8 +269,7 @@ fun DashboardScreen(
                     onOpenModels = onOpenModels,
                     onOpenPlugins = onOpenPlugins,
                     onOpenTerminal = onOpenTerminal,
-                    onOpenTools = onOpenTools,
-                    onOpenCapabilities = onOpenCapabilities,
+                                        onOpenTools = onOpenTools,
                     onOpenSettings = onOpenSettings
                 )
             }
@@ -574,10 +571,15 @@ private fun AuthSummaryCard(
 @Composable
 private fun EventRow(line: Logger.Line, onClick: () -> Unit) {
     val c = botColors
-    val tone = when (line.level.uppercase()) {
-        "E", "ERROR" -> c.danger
-        "W", "WARN" -> c.warning
+    val tone = when (line.level) {
+        Logger.LEVEL_ERROR -> c.danger
+        Logger.LEVEL_WARN -> c.warning
         else -> c.textLow
+    }
+    val levelMark = when (line.level) {
+        Logger.LEVEL_ERROR -> "E"
+        Logger.LEVEL_WARN -> "W"
+        else -> "I"
     }
     Row(
         modifier = Modifier
@@ -595,7 +597,7 @@ private fun EventRow(line: Logger.Line, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(Spacing.sm))
         Text(
-            text = "[${line.tag}]",
+            text = "[$levelMark]",
             color = tone,
             fontSize = FontSize.micro,
             modifier = Modifier.width(56.dp),
@@ -604,7 +606,7 @@ private fun EventRow(line: Logger.Line, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(Spacing.sm))
         Text(
-            text = line.msg,
+            text = line.text,
             color = c.textMid,
             fontSize = FontSize.caption,
             maxLines = 1,
@@ -621,7 +623,6 @@ private fun QuickLinks(
     onOpenPlugins: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenTools: () -> Unit,
-    onOpenCapabilities: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val c = botColors
@@ -640,8 +641,6 @@ private fun QuickLinks(
         QuickRow(Txt.LINK_TERMINAL, Txt.LINK_TERMINAL_DESC, onOpenTerminal)
         QuickDivider()
         QuickRow(Txt.LINK_TOOLS, Txt.LINK_TOOLS_DESC, onOpenTools)
-        QuickDivider()
-        QuickRow(Txt.LINK_CAPABILITY, Txt.LINK_CAPABILITY_DESC, onOpenCapabilities)
         QuickDivider()
         QuickRow(Txt.LINK_SETTINGS, Txt.LINK_SETTINGS_DESC, onOpenSettings)
     }
@@ -722,9 +721,9 @@ private fun attentionIssues(
             route = "logs"
         )
     }
-    if (!state.serviceRunning && state.summary.total > 0) {
+    if (!state.serviceRunning && state.summary.loaded > 0) {
         out += AttentionIssue(
-            text = "已配置 ${state.summary.total} 个机器人但服务未启动",
+            text = "已配置 ${state.summary.loaded} 个机器人但服务未启动",
             route = "bots"
         )
     }

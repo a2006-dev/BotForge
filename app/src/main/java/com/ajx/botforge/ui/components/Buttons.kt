@@ -29,6 +29,8 @@ import com.ajx.botforge.ui.theme.ButtonShape
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
+import com.ajx.botforge.ui.theme.Brand
+import com.ajx.botforge.ui.theme.TextHigh
 import com.ajx.botforge.ui.theme.botColors
 
 /**
@@ -249,7 +251,7 @@ fun SmallButton(
 fun TextButton(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = c.brand,
+    color: Color = Brand,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
@@ -278,7 +280,7 @@ fun IconTextButton(
     icon: ImageVector,
     contentDescription: String,
     modifier: Modifier = Modifier,
-    tint: Color = c.textHigh,
+    tint: Color = TextHigh,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
