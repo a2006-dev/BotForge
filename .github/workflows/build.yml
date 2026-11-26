@@ -116,6 +116,62 @@ jobs:
             exit 1
           fi
 
+      - name: Verify APK contents
+        run: |
+          set -u
+          APK=$(ls out/*.apk 2>/dev/null | head -1)
+          echo "APK: $APK"
+          test -n "$APK" || { echo "::error::未产出 APK"; exit 1; }
+
+          # 解包后逐项核对运行时依赖是否真的进了包。
+          # 这些文件缺失时应用可以启动，但终端页只会显示
+          # “缺少运行环境组件”，属于装完才发现的问题，必须前置拦截。
+          rm -rf apkx && mkdir -p apkx
+          unzip -q "$APK" -d apkx
+
+          fail=0
+          check() {
+            if [ -e "$2" ]; then
+              printf '  ok   %-46s %s\n' "$1" "$(du -h "$2" | cut -f1)"
+            else
+              printf '  FAIL %-46s 缺失\n' "$1"
+              echo "::error title=APK 内容缺失::$1 ($2)"
+              fail=1
+            fi
+          }
+
+          check "proot 可执行文件"        apkx/lib/arm64-v8a/libbfproot.so
+          check "talloc 依赖"             apkx/lib/arm64-v8a/libtalloc.so.2
+          check "rootfs 压缩包"           apkx/assets/rootfs/alpine-rootfs.tar.gz
+          check "classes.dex"             apkx/classes.dex
+          check "资源表"                  apkx/resources.arsc
+
+          # 架构必须只有 arm64-v8a：多架构会让包体翻倍且与 proot 二进制不匹配
+          abis=$(ls apkx/lib 2>/dev/null | tr '\n' ' ')
+          echo "  lib 架构: $abis"
+          case "$abis" in
+            "arm64-v8a ") : ;;
+            *) echo "::error title=架构不符::期望仅 arm64-v8a，实际 [$abis]"; fail=1 ;;
+          esac
+
+          # rootfs 必须是有效 gzip，避免空文件或截断文件混入
+          if [ -e apkx/assets/rootfs/alpine-rootfs.tar.gz ]; then
+            gzip -t apkx/assets/rootfs/alpine-rootfs.tar.gz \
+              && echo "  ok   rootfs gzip 完整性" \
+              || { echo "::error title=rootfs 损坏::gzip 校验失败"; fail=1; }
+          fi
+
+          # 版本号与包名核对，防止改漏 build.gradle
+          PKG=$(grep -o 'package="[^"]*"' apkx/AndroidManifest.xml 2>/dev/null | head -1)
+          echo "  manifest: ${PKG:-未解析到 package}"
+
+          echo "----------------------------------------"
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::APK 完整性校验未通过"
+            exit 1
+          fi
+          echo "APK 完整性校验通过"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
