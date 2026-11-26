@@ -97,16 +97,21 @@ fun DashboardScreen(
 
     LaunchedEffect(Unit) {
         DashboardStore.install()
-        DashboardStore.refreshAll()
+        DashboardStore.refreshStatic()
         permStatus = PermissionGuide.status(context)
     }
 
-    // 服务存活、配置数量、日志没有推送源，用轮询；
-    // 连接状态由 BotStatusRegistry 推送，不依赖轮询。
+    // 任务书第一节要求「服务状态、在线数量、运行日志具备响应式更新能力」。
+    // 三类数据现在都有推送源，不再需要 3 秒轮询：
+    //   - 连接状态 / 在线数 → BotStatusRegistry 推送 → refreshBots()
+    //   - 运行事件 / 日志数 → Logger.listener 推送 → onLogLine()
+    //   - 服务存活 / 配置数 → 随日志与连接变化被动刷新，无需单独轮询
+    // 仅保留一个低频兜底（15 秒），用于服务被系统杀掉但没有日志的场景，
+    // 不作为数据更新的主路径。
     LaunchedEffect(Unit) {
         while (true) {
-            kotlinx.coroutines.delay(3000)
-            DashboardStore.refreshAll()
+            kotlinx.coroutines.delay(15_000)
+            DashboardStore.refreshStatic()
             permStatus = PermissionGuide.status(context)
         }
     }
@@ -273,37 +278,47 @@ fun DashboardScreen(
                 }
 
                 // ---------- 最近运行事件 ----------
-                SectionHeader("最近运行事件")
-                RowGroup {
-                    if (state.events.isEmpty()) {
-                        ListRow(title = "暂无运行记录", subtitle = "启动服务后这里会显示最近事件")
-                    } else {
-                        state.events.forEachIndexed { index, line ->
-                            if (index > 0) RowDivider()
-                            EventRow(line)
-                        }
-                        RowDivider()
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(onClick = onOpenLogs)
-                                .padding(vertical = Spacing.sm),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(text = "查看全部日志 ›", color = Brand, fontSize = FontSize.small)
+                // 服务没在跑、也没有异常时，历史日志对用户没有决策价值，
+                // 反而会把「数据 / 管理 / 运维」整块推到首屏之外。
+                // 所以只有「正在运行」或「有异常」时才占用首屏空间。
+                val showEvents = state.serviceRunning || state.hasAbnormal
+                if (showEvents) {
+                    SectionHeader("最近运行事件")
+                    RowGroup {
+                        if (state.events.isEmpty()) {
+                            ListRow(title = "暂无运行记录", subtitle = "启动服务后这里会显示最近事件")
+                        } else {
+                            state.events.forEachIndexed { index, line ->
+                                if (index > 0) RowDivider()
+                                EventRow(line)
+                            }
+                            RowDivider()
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = onOpenLogs)
+                                    .padding(vertical = Spacing.sm),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(text = "查看全部日志 ›", color = Brand, fontSize = FontSize.small)
+                            }
                         }
                     }
                 }
 
                 // ---------- 数据 ----------
-                SectionHeader("数据")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    StatTile("人设", "${state.personaCount}", "条", Modifier.weight(1f))
-                    StatTile("模型", "${state.modelCount}", "个", Modifier.weight(1f))
-                    StatTile("日志", "${state.logTotal}", "条", Modifier.weight(1f))
+                // 未启动时这些数字只是配置存量，对「要不要启动」没有帮助，
+                // 放在首屏只会挤压「管理 / 运维」入口。
+                if (state.serviceRunning) {
+                    SectionHeader("数据")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        StatTile("人设", "${state.personaCount}", "条", Modifier.weight(1f))
+                        StatTile("模型", "${state.modelCount}", "个", Modifier.weight(1f))
+                        StatTile("日志", "${state.logTotal}", "条", Modifier.weight(1f))
+                    }
                 }
 
                 // ---------- 功能入口 ----------

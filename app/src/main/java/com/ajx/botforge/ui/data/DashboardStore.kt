@@ -81,12 +81,47 @@ object DashboardStore {
         if (installed) return
         installed = true
         com.ajx.botforge.qq.BotStatusRegistry.listener = { _ -> refreshBots() }
+        // 任务书第一节：服务状态、在线数量、运行日志都需要「响应式更新能力」，
+        // 而不是 LaunchedEffect + 轮询。
+        //
+        // Logger 本身就是写入时回调（listener），之前 Dashboard 没用它，
+        // 靠页面 3 秒轮询补数据。现在直接订阅：每写一条日志就更新 StateFlow，
+        // 首页的「最近运行事件」是真正的推送，而不是最多滞后 3 秒的快照。
+        Logger.listener = { line -> onLogLine(line) }
         refreshBots()
+        refreshStatic()
     }
 
     fun uninstall() {
         com.ajx.botforge.qq.BotStatusRegistry.listener = null
+        Logger.listener = null
         installed = false
+    }
+
+    /**
+     * 收到一条新日志时的推送更新。
+     *
+     * 直接基于上一条状态增量更新，不重新读文件、不重扫全部日志，
+     * 保证日志高频写入时也不会拖慢 UI 线程。
+     */
+    private fun onLogLine(line: Logger.Line) {
+        val cur = _state.value
+        _state.value = cur.copy(
+            events = (listOf(line) + cur.events).take(6),
+            logTotal = cur.logTotal + 1
+        )
+    }
+
+    /** 刷新与日志无关的静态数据（服务存活、配置数量）。启动时调用一次即可。 */
+    fun refreshStatic() {
+        val cur = _state.value
+        _state.value = cur.copy(
+            serviceRunning = repo.isServiceRunning(),
+            personaCount = repo.personas().size,
+            modelCount = repo.models().size,
+            logTotal = repo.logs().size,
+            events = repo.logs().takeLast(6).reversed()
+        )
     }
 
     /** 从连接层拉一次真实快照。任何状态变化都走这里，保证 UI 与连接层同源。 */
@@ -97,22 +132,7 @@ object DashboardStore {
         )
     }
 
-    /** 刷新服务存活、配置数量、日志事件。由页面的轻量轮询调用。 */
-    suspend fun refreshAll() {
-        val cur = _state.value
-        val logs = repo.logs()
-        _state.value = cur.copy(
-            serviceRunning = repo.isServiceRunning(),
-            summary = BotManager.summary(),
-            bots = com.ajx.botforge.qq.BotStatusRegistry.snapshot(),
-            events = logs.takeLast(6).reversed(),
-            logTotal = logs.size,
-            personaCount = repo.personas().size,
-            modelCount = repo.models().size
-        )
-    }
-
-    /** 服务启停后立即同步一次，不必等轮询 */
+    /** 服务启停后立即同步一次，不必等推送或兜底刷新 */
     fun syncService(running: Boolean) {
         _state.value = _state.value.copy(
             serviceRunning = running,
