@@ -3,41 +3,46 @@
     BotForge 组件样式（View 侧）
     - 只引用 @color / @dimen 令牌，不出现具体数值和色值。
     - 新页面与迁移中的页面通过 style="..." 使用，旧页面可暂时保持原样。
+
+    重要：AAPT 会把带点号的名字当作隐式父样式继承，例如
+    "Text.Heading" 会自动去找父样式 "Text"，找不到就报
+    "resource style/Text not found"。所以这里所有点号样式
+    都必须显式写 parent=""，明确表示没有父样式。
 -->
 <resources>
 
     <!-- ===================== 文本 ===================== -->
 
-    <style name="Text.Heading">
+    <style name="Text.Heading" parent="">
         <item name="android:textSize">@dimen/text_size_heading</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textStyle">bold</item>
         <item name="android:includeFontPadding">false</item>
     </style>
 
-    <style name="Text.Title">
+    <style name="Text.Title" parent="">
         <item name="android:textSize">@dimen/text_size_title</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="Text.Body">
+    <style name="Text.Body" parent="">
         <item name="android:textSize">@dimen/text_size_body</item>
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
-    <style name="Text.Secondary">
+    <style name="Text.Secondary" parent="">
         <item name="android:textSize">@dimen/text_size_label</item>
         <item name="android:textColor">@color/text_secondary</item>
     </style>
 
-    <style name="Text.Caption">
+    <style name="Text.Caption" parent="">
         <item name="android:textSize">@dimen/text_size_small</item>
         <item name="android:textColor">@color/text_tertiary</item>
     </style>
 
     <!-- 表单字段标签 -->
-    <style name="Text.FieldLabel">
+    <style name="Text.FieldLabel" parent="">
         <item name="android:textSize">@dimen/text_size_label</item>
         <item name="android:textColor">@color/text_secondary</item>
         <item name="android:paddingStart">2dp</item>
@@ -46,7 +51,7 @@
 
     <!-- ===================== 按钮 ===================== -->
 
-    <style name="Button.Primary">
+    <style name="Button.Primary" parent="">
         <item name="android:layout_height">@dimen/button_height</item>
         <item name="android:textSize">@dimen/text_size_body</item>
         <item name="android:textColor">@color/text_on_accent</item>
@@ -57,7 +62,7 @@
         <item name="android:letterSpacing">0</item>
     </style>
 
-    <style name="Button.Secondary">
+    <style name="Button.Secondary" parent="">
         <item name="android:layout_height">@dimen/button_height</item>
         <item name="android:textSize">@dimen/text_size_body</item>
         <item name="android:textColor">@color/text_primary</item>
@@ -67,7 +72,7 @@
         <item name="android:letterSpacing">0</item>
     </style>
 
-    <style name="Button.Danger">
+    <style name="Button.Danger" parent="">
         <item name="android:layout_height">@dimen/button_height</item>
         <item name="android:textSize">@dimen/text_size_body</item>
         <item name="android:textColor">@color/status_error</item>
@@ -79,7 +84,7 @@
 
     <!-- ===================== 输入框 ===================== -->
 
-    <style name="Input.Text">
+    <style name="Input.Text" parent="">
         <item name="android:textSize">@dimen/text_size_body</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textColorHint">@color/text_tertiary</item>
@@ -89,10 +94,9 @@
         <item name="android:paddingTop">@dimen/spacing_md</item>
         <item name="android:paddingBottom">@dimen/spacing_md</item>
         <item name="android:singleLine">true</item>
-        <item name="android:textCursorDrawable">@null</item>
     </style>
 
-    <!-- 多行输入（人设内容等长文本） -->
+    <!-- 多行输入（人设内容等长文本）：显式继承 Input.Text -->
     <style name="Input.Multiline" parent="Input.Text">
         <item name="android:singleLine">false</item>
         <item name="android:minLines">6</item>
@@ -101,13 +105,13 @@
 
     <!-- ===================== 卡片 / 列表 ===================== -->
 
-    <style name="Card">
+    <style name="Card" parent="">
         <item name="android:background">@drawable/bg_card</item>
         <item name="android:padding">@dimen/card_padding</item>
         <item name="android:layout_marginTop">@dimen/card_gap</item>
     </style>
 
-    <style name="List.Item">
+    <style name="List.Item" parent="">
         <item name="android:minHeight">@dimen/list_item_min_height</item>
         <item name="android:paddingStart">@dimen/card_padding</item>
         <item name="android:paddingEnd">@dimen/card_padding</item>
@@ -118,7 +122,8 @@
 
     <!-- ===================== 状态标签 ===================== -->
 
-    <style name="Tag">
+    <!-- 基础标签样式。点号样式统一显式继承它，避免 AAPT 去找不存在的 "Tag" 以外父级 -->
+    <style name="Tag" parent="">
         <item name="android:textSize">@dimen/text_size_caption</item>
         <item name="android:paddingStart">@dimen/spacing_sm</item>
         <item name="android:paddingEnd">@dimen/spacing_sm</item>
@@ -130,29 +135,29 @@
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="Tag.Success">
+    <style name="Tag.Success" parent="Tag">
         <item name="android:textColor">@color/status_success</item>
         <item name="android:background">@drawable/bg_tag_success</item>
     </style>
 
-    <style name="Tag.Warning">
+    <style name="Tag.Warning" parent="Tag">
         <item name="android:textColor">@color/status_warning</item>
         <item name="android:background">@drawable/bg_tag_warning</item>
     </style>
 
-    <style name="Tag.Error">
+    <style name="Tag.Error" parent="Tag">
         <item name="android:textColor">@color/status_error</item>
         <item name="android:background">@drawable/bg_tag_error</item>
     </style>
 
-    <style name="Tag.Idle">
+    <style name="Tag.Idle" parent="Tag">
         <item name="android:textColor">@color/status_idle</item>
         <item name="android:background">@drawable/bg_tag_idle</item>
     </style>
 
     <!-- ===================== 分割线 ===================== -->
 
-    <style name="Divider">
+    <style name="Divider" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">@dimen/border_width</item>
         <item name="android:background">@color/divider</item>
