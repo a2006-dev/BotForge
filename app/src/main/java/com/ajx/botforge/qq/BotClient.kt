@@ -190,6 +190,24 @@ class BotClient(
         }
     }
 
+    /**
+     * 统一异常分类入口（任务书第四节）。
+     * 上面的 classify 只产出中文标签；这里额外带上 Bot 名、代次、状态、
+     * 重连次数与脱敏后的消息，形成一条可定位日志。
+     */
+    private fun logError(gen: Long, state: String, e: Throwable, reconnect: Int = 0) {
+        val kind = com.ajx.botforge.data.ErrorTaxonomy.classify(e)
+        val text = com.ajx.botforge.data.ErrorTaxonomy.describe(
+            botName = cfg.name,
+            generation = gen,
+            state = state,
+            kind = kind,
+            e = e,
+            reconnectCount = reconnect
+        )
+        Logger.e("Bot", text)
+    }
+
     private fun connectAndListen() {
         val gatewayUrl = QqApi.gateway(session)
         val uri = URI(gatewayUrl)
