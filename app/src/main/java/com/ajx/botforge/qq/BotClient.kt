@@ -117,8 +117,10 @@ class BotClient(
         val helloObj = JSONObject(hello)
         val op = helloObj.optInt("op", -1)
         if (op != 10) throw IllegalStateException("首个包不是 HELLO: op=$op")
-        interval = helloObj.optJSONObject("d")?.optLong("heartbeat_interval", 41250) ?: 41250
-        Logger.i("Bot", "心跳间隔 ${interval}ms")
+        // 心跳周期：取服务端下发值与 30s 的较小者，避免下发值偏大导致被提前踢
+        val raw = helloObj.optJSONObject("d")?.optLong("heartbeat_interval", 41250) ?: 41250
+        interval = if (raw > 30000L) 30000L else raw
+        Logger.i("Bot", "心跳间隔 ${interval}ms（服务端下发 ${raw}ms）")
 
         // 2. 鉴权
         identify(client)
@@ -182,8 +184,12 @@ class BotClient(
     private fun startHeartbeat(client: WsClient) {
         heartbeatThread = Thread({
             var alive = true
+            // 第一次心跳立即发送：QQ 网关要求连接建立后尽快收到首个心跳，
+            // 若先等满 interval 再发，服务端常在这段空闲期内主动断连
+            var first = true
             while (alive && running && client.isAlive()) {
-                sleepQuiet(interval)
+                if (!first) sleepQuiet(interval)
+                first = false
                 if (!running || !client.isAlive()) break
                 runCatching {
                     val p = JSONObject().apply {

@@ -111,10 +111,13 @@ class WsClient(
         return arr
     }
 
-    /** 读取一条消息文本；自动回应 ping/pong、跳过二进制 */
+    /** 读取一条完整消息文本；自动拼装分片帧、回应 ping */
     fun read(timeoutMs: Int = 90000): String? {
         val ins = input ?: return null
         (socket as? Socket)?.soTimeout = timeoutMs
+
+        val chunks = java.io.ByteArrayOutputStream()
+        var fragOpcode = -1
 
         while (!closed) {
             val b0 = ins.read()
@@ -128,12 +131,18 @@ class WsClient(
             var len = (b1 and 0x7F).toLong()
 
             if (len == 126L) {
-                len = ((ins.read() shl 8) or ins.read()).toLong()
+                val x1 = ins.read(); val x2 = ins.read()
+                if (x1 == -1 || x2 == -1) return null
+                len = ((x1 shl 8) or x2).toLong()
             } else if (len == 127L) {
                 len = 0
-                repeat(8) { len = (len shl 8) or ins.read().toLong() }
+                repeat(8) {
+                    val x = ins.read()
+                    if (x == -1) return null
+                    len = (len shl 8) or x.toLong()
+                }
             }
-            if (len > 8 * 1024 * 1024) throw IllegalStateException("帧过大: $len")
+            if (len < 0 || len > 16L * 1024 * 1024) throw IllegalStateException("帧过大: $len")
 
             val maskKey = if (masked) ByteArray(4).also { ins.readFully(it) } else null
             val data = ByteArray(len.toInt())
@@ -150,12 +159,32 @@ class WsClient(
             }
 
             when (opcode) {
-                0x1 -> return String(data, Charsets.UTF_8)          // text
-                0x8 -> { onLog("收到 close 帧"); close(); return null } // close
-                0x9 -> sendControl(0xA, data)                       // ping -> pong
-                0xA -> { /* pong 忽略 */ }
-                0x0 -> return String(data, Charsets.UTF_8)          // 续帧
-                else -> { /* 二进制等，跳过 */ }
+                0x8 -> { onLog("收到 close 帧"); close(); return null }
+                0x9 -> { sendControl(0xA, data); continue }
+                0xA -> continue
+                0x1, 0x2 -> {
+                    // 新的数据帧：记录起始类型，开始收集
+                    if (fin) {
+                        // 单帧完整消息
+                        if (opcode == 0x1) return String(data, Charsets.UTF_8) else continue
+                    }
+                    fragOpcode = opcode
+                    chunks.reset()
+                    chunks.write(data)
+                }
+                0x0 -> {
+                    // 续帧：追加到已有分片
+                    if (fragOpcode == -1) continue
+                    chunks.write(data)
+                    if (fin) {
+                        val all = chunks.toByteArray()
+                        chunks.reset()
+                        val op = fragOpcode
+                        fragOpcode = -1
+                        if (op == 0x1) return String(all, Charsets.UTF_8)
+                    }
+                }
+                else -> { /* 其它类型跳过 */ }
             }
         }
         return null
