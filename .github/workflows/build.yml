@@ -70,8 +70,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f build.log ]; then
-            ERR=$(grep -E "^e: |error:|FAILURE:|What went wrong" build.log | head -40)
-            gh issue create --title "CI fail $(date +%s)" --body "$(echo "$ERR" | head -c 60000)" || true
+            ERR=$(tail -n 120 build.log)
+            printf '%s\n' "$ERR" > /tmp/err.txt
+            gh issue create --title "CI fail $(date +%s)" --body-file /tmp/err.txt || true
           fi
 
       - name: Upload build log
