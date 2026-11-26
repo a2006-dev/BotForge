@@ -48,7 +48,10 @@ object MessageHandler {
                 Logger.i("Msg", "冷却中，跳过")
                 return
             }
-            lastReply[sKey] = now
+            // 注意：这里只做检查，不占用冷却。
+            // 旧实现在此直接把 now 写入 lastReply，导致模型失败、图片加载失败、
+            // 图片消息被过滤等"没有真正回复"的情况也消耗了冷却窗口，
+            // 用户紧接着再发一句反而被静默丢弃。真正的占位在下方 markCooldown()。
         }
 
         // 指令
@@ -134,16 +137,27 @@ object MessageHandler {
             }
         }
 
-        // 调用
-        val answer = AiEngine.chat(
+        // 调用（失败重试 1 次，仍失败则给出可见提示，不再静默 —— F6）
+        var answer = AiEngine.chat(
             model, sb.toString(), history, userContent,
             persona?.temperature ?: 0.8f,
             persona?.maxTokens ?: model.maxTokens,
             imagePayload
         )
+        if (answer == null) {
+            Logger.w("Msg", "模型无返回，1 秒后重试一次")
+            Thread.sleep(1000)
+            answer = AiEngine.chat(
+                model, sb.toString(), history, userContent,
+                persona?.temperature ?: 0.8f,
+                persona?.maxTokens ?: model.maxTokens,
+                imagePayload
+            )
+        }
 
         if (answer == null) {
-            Logger.w("Msg", "模型无返回，本次不回复")
+            Logger.w("Msg", "模型重试仍失败，回一条提示")
+            reply(bot, ev, "（我这边模型没响应，稍后再发一次？）")
             return
         }
 
@@ -169,17 +183,28 @@ object MessageHandler {
         // 被动回复必须带上原消息 msg_id，且同一 msg_id 下的多条回复 msg_seq 需递增，
         // 否则平台会判定为重复或直接拒收
         var seq = 1
+        var sent = 0
         chunks.forEach { c ->
             try {
-                when (ev.scene) {
+                val ok = when (ev.scene) {
                     "group" -> QqApi.sendGroup(bot, ev.groupOpenId, c, ev.messageId.ifEmpty { null }, seq)
                     "c2c" -> QqApi.sendC2C(bot, ev.userOpenId, c, ev.messageId.ifEmpty { null }, seq)
+                    else -> false
                 }
+                if (ok) sent++
                 seq++
             } catch (e: Exception) {
                 Logger.w("Msg", "发送失败: ${e.message}")
             }
         }
+        // 只有真的发出去才占用冷却窗口（F10）
+        if (sent > 0) markCooldown(bot, ev)
+    }
+
+    /** 记录该会话已回复，用于冷却判断 */
+    private fun markCooldown(bot: Config.Bot, ev: BotClient.Event) {
+        val k = "${bot.id}:${ev.scene}:${ev.groupOpenId ?: ev.userOpenId}"
+        synchronized(lock) { lastReply[k] = System.currentTimeMillis() }
     }
 
     /** QQ 单条上限保守取 1200，按标点断句 */

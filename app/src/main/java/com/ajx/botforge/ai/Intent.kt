@@ -19,9 +19,15 @@ object Intent {
     private val coax = Regex(
         "(摸摸|抱抱|贴贴|亲亲|乖|最喜欢你|好喜欢你|别生气|不气|哄哄|想你|好看|真棒|夸夸|可爱)"
     )
-    private val teasing = Regex("(笨蛋|傻|蠢|胖|小可爱|略略略|哈哈|笑死)")
-    private val positive = Regex("(谢谢|感谢|厉害|好玩|不错|牛|赞|开心|早安|晚安|你好|hi|hello)", RegexOption.IGNORE_CASE)
-    private val negative = Regex("(滚|闭嘴|傻逼|垃圾|废物|去死|妈的|操|闭嘴吧)")
+    private val teasing = Regex("(笨蛋|傻(?!瓜|白)|蠢|胖(?!东来|大海)|小可爱|略略略|哈哈|笑死)")
+    private val positive = Regex("(谢谢|感谢|厉害|好玩|不错|牛(?![奶肉排油])|赞|开心|早安|晚安|你好|hi|hello)", RegexOption.IGNORE_CASE)
+    // 「操」单字极易误判（操作、操场、操心、体操、操练、操课、操守、节操……），
+    // 只保留真正带攻击性的组合，并对常见正常搭配做否定预查。
+    private val negative = Regex(
+        "(滚|闭嘴|傻逼|垃圾|废物|去死|妈的" +
+                "|操(?![作场心练盘控办守课节行持办典劳])" +
+                "|tmd|nmsl)", RegexOption.IGNORE_CASE
+    )
 
     fun classify(text: String): Kind {
         val t = text.trim()
