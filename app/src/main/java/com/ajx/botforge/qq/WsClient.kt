@@ -99,9 +99,16 @@ class WsClient(
             masked[i] = (payload[i].toInt() xor mask[i % 4].toInt()).toByte()
         }
 
-        os.write(header.toByteArray())
+        os.write(header.toByteArray0())
         os.write(masked)
         os.flush()
+    }
+
+    /** ArrayList<Byte> 没有现成的 toByteArray()，这里手写 */
+    private fun ArrayList<Byte>.toByteArray0(): ByteArray {
+        val arr = ByteArray(this.size)
+        for (i in this.indices) arr[i] = this[i]
+        return arr
     }
 
     /** 读取一条消息文本；自动回应 ping/pong、跳过二进制 */
@@ -128,7 +135,7 @@ class WsClient(
             }
             if (len > 8 * 1024 * 1024) throw IllegalStateException("帧过大: $len")
 
-            val maskKey = if (masked) ByteArray(4).also { ins.read(it) } else null
+            val maskKey = if (masked) ByteArray(4).also { ins.readFully(it) } else null
             val data = ByteArray(len.toInt())
             var read = 0
             while (read < data.size) {
@@ -186,4 +193,15 @@ class WsClient(
     }
 
     fun isAlive(): Boolean = !closed && socket != null
+}
+
+/** InputStream 读满缓冲区，返回实际读取字节数 */
+private fun InputStream.readFully(buf: ByteArray): Int {
+    var off = 0
+    while (off < buf.size) {
+        val n = read(buf, off, buf.size - off)
+        if (n <= 0) break
+        off += n
+    }
+    return off
 }

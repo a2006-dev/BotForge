@@ -19,7 +19,11 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          ls "$ANDROID_SDK_ROOT" || true
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -52,10 +56,23 @@ jobs:
           fi
 
       - name: Build debug
-        run: gradle :app:assembleDebug --stacktrace --no-daemon
+        run: |
+          gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
 
       - name: Build release
-        run: gradle :app:assembleRelease --stacktrace --no-daemon || echo "release 失败，仅产出 debug"
+        run: |
+          gradle :app:assembleRelease --stacktrace --no-daemon 2>&1 | tee release.log || echo "release 失败，仅产出 debug"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            release.log
+          retention-days: 7
 
       - name: Collect APKs
         run: |
