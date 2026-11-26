@@ -152,7 +152,10 @@ class MainActivity : ComponentActivity() {
                 return
             }
             if (!st.granted) {
-                toast("请在 Shizuku 弹窗里允许 BotForge")
+                // 关键修复：旧实现在这里只弹了个 Toast 就 return，从未真正发起授权请求，
+                // 所以 Shizuku 的授权弹窗永远不会出现。必须先 request()。
+                toast("正在请求 Shizuku 授权…")
+                ShizukuKeepAlive.request(this@MainActivity)
                 return
             }
             val a = ShizukuKeepAlive.whitelistBattery(this@MainActivity)

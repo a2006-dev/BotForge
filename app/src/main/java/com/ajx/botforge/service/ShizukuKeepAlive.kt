@@ -28,6 +28,7 @@ object ShizukuKeepAlive {
     )
 
     fun status(ctx: Context): State {
+        rememberContext(ctx)
         val installed = try {
             ctx.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0)
             true
@@ -50,6 +51,7 @@ object ShizukuKeepAlive {
 
     /** 请求授权 */
     fun request(ctx: Context) {
+        rememberContext(ctx)
         runCatching {
             if (!Shizuku.pingBinder()) {
                 Logger.w(TAG, "Shizuku 服务未运行，请先启动 Shizuku")
@@ -59,9 +61,68 @@ object ShizukuKeepAlive {
                 Logger.i(TAG, "已有授权")
                 return
             }
+            ensureListener()
             Shizuku.requestPermission(REQUEST_CODE)
             Logger.i(TAG, "已发起授权请求，请在 Shizuku 弹窗中允许")
         }.onFailure { Logger.e(TAG, "请求授权失败: ${it.message}") }
+    }
+
+    /**
+     * 注册授权结果监听（必须在 requestPermission 之前）
+     *
+     * Shizuku 的弹窗是异步的：requestPermission() 只是把请求转给 Shizuku 服务，
+     * Shizuku 服务随后在主进程里查找已注册的 OnRequestPermissionResultListener，
+     * 找到才拉起授权弹窗并回调结果。
+     *
+     * 不注册监听器时：requestPermission() 返回正常、不抛异常、日志也打得出
+     * 「已发起授权请求」，但弹窗永远不会出现——这正是「点了没反应」的真实原因。
+     *
+     * 用 listenerRegistered 防重复注册：Shizuku 内部用列表保存监听器，
+     * 每次 request() 都 add 一次会导致同一结果被回调 N 次。
+     */
+    @Volatile
+    private var listenerRegistered = false
+
+    /**
+     * 应用级 Context（授权成功后要拉起服务用）
+     *
+     * 监听器回调不带 Context，所以在任何拿到 Context 的入口顺手缓存
+     * applicationContext。这个引用不会泄漏 Activity，进程内单例持有无风险。
+     */
+    @Volatile
+    private var appContext: Context? = null
+
+    private fun rememberContext(ctx: Context) {
+        if (appContext == null) {
+            appContext = ctx.applicationContext ?: ctx
+        }
+    }
+
+    private val permissionListener =
+        Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode != REQUEST_CODE) return@OnRequestPermissionResultListener
+            if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                Logger.i(TAG, "用户已授权 Shizuku 提权")
+                // 授权成功后立刻做一次保活动作，省得用户再点一次按钮
+                appContext?.let { c ->
+                    runCatching { startService(c) }
+                        .onFailure { Logger.w(TAG, "授权后拉起服务失败: ${it.message}") }
+                }
+            } else {
+                Logger.w(TAG, "用户拒绝授权 Shizuku（grantResult=$grantResult）")
+            }
+        }
+
+    private fun ensureListener() {
+        if (listenerRegistered) return
+        synchronized(this) {
+            if (listenerRegistered) return
+            runCatching {
+                Shizuku.addRequestPermissionResultListener(permissionListener)
+                listenerRegistered = true
+                Logger.i(TAG, "已注册授权结果监听")
+            }.onFailure { Logger.e(TAG, "注册授权监听失败: ${it.message}") }
+        }
     }
 
     /**
