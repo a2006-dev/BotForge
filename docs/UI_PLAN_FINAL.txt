@@ -1,0 +1,479 @@
+BotForge UI 改造技术方案与最终决策
+
+一、五项技术决策汇总
+
+决策事项| 最终选择
+Compose 引入时机| C：先使用 View 完成当前 UI，未来按需引入
+设计系统| Android Resource 作为视觉令牌唯一来源
+深色主题迁移| B：兼容式分阶段迁移，但不直接大改 BaseActivity
+首页改造顺序| B：设计系统 → Bot 列表试点 → 首页 → 其他页面
+编译验收| 分级验收，最终必须完成 APK 构建和真机测试
+
+核心原则：先统一视觉体系，再逐页改造。不要为了 UI 改造重写业务架构，也不要为了追求新技术而增加不必要的维护成本。
+
+---
+
+二、Compose 引入时机
+
+最终选择：C，当前阶段暂不引入 Compose
+
+BotForge 目前的基础设施非常简单：
+
+- 没有 Compose 依赖。
+- 没有 ViewModel。
+- 没有 Repository。
+- 业务逻辑主要由 Config、BotManager、PluginRegistry 等 object 单例提供。
+- 所有页面已经使用原生 View 构建。
+
+现在引入 Compose，意味着不仅要增加依赖，还要考虑：
+
+1. Compose 与现有 View 的混合使用。
+2. Kotlin 1.9.22 对应的 Compose 编译器版本。
+3. Compose MaterialTheme 与现有 Android Theme 的关系。
+4. 页面状态管理。
+5. 新旧组件的维护成本。
+6. 未来是否需要为 Compose 页面额外维护 ViewModel。
+
+这些成本并不是不能承担，而是当前没有足够的实际需求来证明它们值得承担。
+
+当前技术路线
+
+继续使用：
+
+- Kotlin
+- AppCompat
+- Material Components
+- RecyclerView
+- ConstraintLayout
+- Dialog / BottomSheet
+
+对于列表、表单、设置、日志、状态展示等页面，这套技术完全能够满足需求。
+
+未来什么时候引入 Compose？
+
+当出现以下情况时再重新评估：
+
+- 新页面交互复杂度明显增加。
+- 需要大量动态状态和复杂动画。
+- View 方案已经明显影响开发效率。
+- 某个独立模块适合单独采用 Compose。
+
+届时可以只在新模块中使用 Compose，不需要迁移整个 App。
+
+注意：这意味着对原规划书中“新增页面使用 Compose”的方案暂时作出调整。原规划书是后续生态功能的设计规划，不代表当前主程序必须提前引入 Compose。
+
+---
+
+三、设计系统：Android Resource 作为唯一视觉令牌来源
+
+最终选择：资源文件作为视觉基础规范
+
+不建议把颜色、尺寸全部放在 Kotlin object 中，也不建议让 XML 和 Compose 各自维护一套颜色。
+
+建议建立以下结构：
+
+app/src/main/res/
+├── values/
+│   ├── colors.xml
+│   ├── dimens.xml
+│   ├── strings.xml
+│   ├── styles.xml
+│   └── themes.xml
+├── drawable/
+│   └── ...
+└── xml/
+    └── file_paths.xml
+
+1. colors.xml
+
+集中管理颜色，不允许页面继续随意硬编码颜色。
+
+建议先建立以下颜色令牌：
+
+<resources>
+    <color name="bg_primary">#111318</color>
+    <color name="bg_secondary">#191C23</color>
+    <color name="bg_card">#20242D</color>
+    <color name="bg_elevated">#282D37</color>
+
+    <color name="text_primary">#F3F4F6</color>
+    <color name="text_secondary">#A1A7B3</color>
+    <color name="text_tertiary">#737B89</color>
+
+    <color name="accent_primary">#6C9EFF</color>
+    <color name="accent_pressed">#4F83E8</color>
+
+    <color name="status_success">#42C98A</color>
+    <color name="status_warning">#F2B85C</color>
+    <color name="status_error">#F06B70</color>
+
+    <color name="divider">#303540</color>
+</resources>
+
+以上是初始设计建议，后续应根据实际界面效果统一调整。
+
+2. dimens.xml
+
+集中管理间距、圆角、字号和组件高度。
+
+<resources>
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="spacing_xxl">32dp</dimen>
+
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">12dp</dimen>
+    <dimen name="radius_lg">16dp</dimen>
+
+    <dimen name="text_size_small">12sp</dimen>
+    <dimen name="text_size_body">14sp</dimen>
+    <dimen name="text_size_title">18sp</dimen>
+    <dimen name="text_size_heading">22sp</dimen>
+
+    <dimen name="button_height">48dp</dimen>
+</resources>
+
+3. styles.xml
+
+管理传统 View 的公共样式，例如按钮、输入框和文本样式。
+
+4. themes.xml
+
+管理应用主题、窗口背景、系统栏颜色以及基础主题属性。
+
+5. 未来 Compose 如何共享？
+
+未来如果引入 Compose，可以通过：
+
+colorResource(R.color.bg_primary)
+dimensionResource(R.dimen.spacing_lg)
+
+读取 Android Resource。
+
+Compose MaterialTheme 再基于这些资源组织 ColorScheme、Typography 和 Shapes。
+
+不需要强行让 XML Style 与 Compose MaterialTheme 完全一致，只需要保证它们使用相同的基础视觉令牌。
+
+最终原则：颜色、尺寸等基础规范只有一套，View 和 Compose 可以有各自的组件实现。
+
+---
+
+四、深色主题兼容式迁移
+
+最终选择：B，但不直接重构 BaseActivity
+
+我不建议现在直接修改 BaseActivity 中的所有公共方法。
+
+原因是它被多个 Activity 共同使用，一旦修改不当，可能造成多个页面同时出现问题。
+
+也不建议完全重写每个 Activity。
+
+更合理的方式是建立独立的 UI 组件层。
+
+第一步：建立资源文件
+
+先建立 colors.xml、dimens.xml、styles.xml、themes.xml。
+
+这一步只建立视觉规范，不改变现有页面逻辑。
+
+第二步：建立新的 UI 组件层
+
+建议结构：
+
+ui/
+├── components/
+│   ├── BotForgeUI.kt
+│   ├── UIColors.kt
+│   ├── UIComponents.kt
+│   └── UIStyles.kt
+└── ...
+
+例如：
+
+object BotForgeUI {
+
+    fun createTitle(context: Context): TextView {
+        return TextView(context).apply {
+            setTextColor(
+                ContextCompat.getColor(
+                    context,
+                    R.color.text_primary
+                )
+            )
+            textSize = 22f
+        }
+    }
+
+    fun createLabel(context: Context): TextView {
+        return TextView(context).apply {
+            setTextColor(
+                ContextCompat.getColor(
+                    context,
+                    R.color.text_secondary
+                )
+            )
+            textSize = 14f
+        }
+    }
+}
+
+这里只是示意，实际实现还需要统一字体、间距、布局参数和状态样式。
+
+第三步：新旧组件共存
+
+保留 BaseActivity 原有方法。
+
+新页面或正在迁移的页面使用 BotForgeUI。
+
+暂时没有迁移的页面继续使用原有方法。
+
+这样可以避免一次性影响全部页面。
+
+第四步：逐页迁移
+
+每迁移一个页面：
+
+1. 替换硬编码颜色。
+2. 替换字号和间距。
+3. 替换卡片、按钮和输入框。
+4. 检查深色背景下的对比度。
+5. 检查点击、编辑、删除等原有功能。
+6. 编译并进行页面测试。
+
+第五步：清理旧代码
+
+当所有页面完成迁移后：
+
+- 删除旧的硬编码颜色。
+- 删除不再使用的 BaseActivity UI 辅助方法。
+- 清理重复组件。
+- 统一公共组件接口。
+
+不要让 BaseActivity 最终变成一个庞大的 UI 工具类。
+
+---
+
+五、页面改造顺序
+
+最终选择：B
+
+第一阶段：设计系统
+        ↓
+第二阶段：Bot 列表页试点
+        ↓
+第三阶段：首页重做
+        ↓
+第四阶段：其他页面逐一迁移
+        ↓
+第五阶段：清理旧 UI 代码
+        ↓
+第六阶段：后续生态页面按实际开发进度实现
+
+为什么先改 Bot 列表页？
+
+首页虽然最重要，但它是一个独立的复杂页面，而且不依赖 BaseActivity 的公共 UI 辅助方法。
+
+直接先重做首页，不能充分验证公共组件体系是否合理。
+
+Bot 列表页更适合做试点：
+
+- 可以验证卡片设计。
+- 可以验证列表间距。
+- 可以验证字体层级。
+- 可以验证状态标签。
+- 可以验证空状态。
+- 可以验证深色背景。
+- 可以验证公共组件的复用性。
+
+如果 Bot 列表页的设计系统成熟，再改首页就能减少返工。
+
+建议的页面优先级
+
+优先级| 页面| 改造重点
+P0| 设计系统| 颜色、字号、间距、圆角、公共组件
+P1| Bot 列表| 卡片、列表、状态、空状态
+P1| 首页| 核心状态、主要入口、信息层级
+P2| Bot 编辑| 表单、输入框、保存状态
+P2| 人设列表/编辑| 列表和表单统一
+P2| 模型列表/编辑| 模型状态和配置展示
+P2| 分组管理| 列表、分组操作
+P3| 日志| 过滤、错误信息、导出入口
+后续| 生态功能页面| 根据真实业务实现进度开发
+
+这里的 P0/P1 是 UI 改造优先级，不代表规划书中功能的业务开发优先级。
+
+另外，日志页不能只追求美观。错误信息、时间、级别和真实运行状态必须清晰可见。
+
+---
+
+六、UI 与业务逻辑的隔离
+
+当前没有必要为了 UI 改造引入完整的 MVVM 架构。
+
+但建议增加一层轻量 UI Controller，避免 Activity 直接承担所有业务调用。
+
+建议结构：
+
+Activity
+   ↓
+UI Controller
+   ↓
+Config / BotManager / PluginRegistry
+   ↓
+现有业务逻辑
+
+UI Controller 负责：
+
+- 读取页面需要的数据。
+- 调用现有业务操作。
+- 将结果返回给 Activity。
+- 处理基础错误信息和状态。
+
+暂时不需要为了它引入完整 Repository、UseCase、DI 等架构。
+
+等业务规模真正扩大，再逐步演进。
+
+---
+
+七、编译和测试验收标准
+
+必须区分 Kotlin 编译、APK 构建和真实设备验证。
+
+Level 1：单页面开发完成
+
+至少完成：
+
+- Kotlin 编译检查。
+- 资源引用检查。
+- 页面相关功能检查。
+- 页面布局和视觉检查。
+
+不能仅凭代码没有报红就认为页面完成。
+
+Level 2：一个阶段完成
+
+例如设计系统完成、Bot 列表迁移完成。
+
+优先执行：
+
+./gradlew :app:assembleDebug
+
+如果构建环境允许，必须确认任务成功退出，并检查 APK 是否生成。
+
+Level 3：最终交付
+
+最终版本必须尽可能完成：
+
+1. 完整 Debug APK 构建。
+2. APK 安装到真实 Android 设备。
+3. 启动应用。
+4. 检查所有主要页面。
+5. 测试 Bot 创建、编辑、删除等核心操作。
+6. 检查列表和配置数据是否正常。
+7. 检查日志和错误展示。
+8. 检查应用重启后的状态。
+9. 检查是否存在崩溃、布局溢出和明显卡顿。
+
+Level 4：本地构建受限时
+
+可以使用 GitHub Actions 进行构建。
+
+但必须如实区分：
+
+- 本地 Kotlin 编译通过。
+- CI APK 构建通过。
+- 真机安装测试通过。
+
+三者不是同一件事。
+
+不能把 CI 构建成功描述成真机测试通过。
+
+关于 Gradle 缓存
+
+当前手机存储只有约 7.6GB，不建议每次构建前都执行：
+
+./gradlew clean
+
+优先增量构建。
+
+只有在确认缓存或构建产物异常时才考虑清理。
+
+---
+
+八、建议的分阶段实施清单
+
+阶段 1：设计系统
+
+- [ ] 建立 colors.xml
+- [ ] 建立 dimens.xml
+- [ ] 建立 styles.xml
+- [ ] 调整 themes.xml
+- [ ] 确定深色主题颜色
+- [ ] 确定字号和间距规范
+- [ ] 建立公共卡片、按钮、标签组件
+- [ ] 编译检查
+
+阶段 2：Bot 列表试点
+
+- [ ] 替换旧颜色
+- [ ] 统一卡片样式
+- [ ] 统一列表间距
+- [ ] 统一状态标签
+- [ ] 设计空状态
+- [ ] 保留原有业务功能
+- [ ] 页面测试
+- [ ] APK 构建
+
+阶段 3：首页重做
+
+- [ ] 重新规划首页信息层级
+- [ ] 突出真实连接状态
+- [ ] 显示关键运行信息
+- [ ] 整理主要功能入口
+- [ ] 统一卡片和状态样式
+- [ ] 保留现有业务能力
+- [ ] 真机检查
+
+阶段 4：其余页面迁移
+
+- [ ] Bot 编辑
+- [ ] 人设列表和编辑
+- [ ] 模型列表和编辑
+- [ ] 分组管理
+- [ ] 日志
+
+每个页面独立完成、独立验收。
+
+阶段 5：清理和交付
+
+- [ ] 清理旧硬编码颜色
+- [ ] 清理重复 UI 组件
+- [ ] 清理废弃辅助方法
+- [ ] 检查主题一致性
+- [ ] 完整 APK 构建
+- [ ] 真机安装测试
+- [ ] 输出最终改造记录
+
+---
+
+九、最终结论
+
+BotForge 目前最需要的不是换一套 UI 技术，而是建立一套稳定、统一、可复用的视觉体系。
+
+我的最终建议是：
+
+1. 暂时不引入 Compose。
+2. 使用 Android Resource 建立统一设计令牌。
+3. 新建独立 UI 组件层，不直接大改 BaseActivity。
+4. 先用 Bot 列表验证设计系统。
+5. 再重做首页。
+6. 其他页面逐一迁移。
+7. 不顺手重写整个业务架构。
+8. 最终以完整 APK 构建和真机测试作为交付标准。
+
+对于一个人长期维护的项目，稳定、统一、可迭代，比一次性采用更多新技术更重要。
+
+目标不是让 BotForge 看起来像一个套了深色主题的普通 Android 工具，而是让它拥有真正成熟的产品级视觉和交互体验，同时保持现有业务逻辑可靠。

@@ -1,0 +1,146 @@
+package com.ajx.botforge.ui.data
+
+import android.content.Context
+import com.ajx.botforge.data.Config
+import com.ajx.botforge.data.Logger
+import com.ajx.botforge.qq.BotManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * UI 层唯一的数据入口。
+ *
+ * 设计约束（务必遵守）：
+ * 1. 不直接 new 任何业务单例，全部走 Config / Logger / BotManager 的现有静态接口；
+ * 2. 不做任何字段映射上的“美化”，业务字段原样透传，避免 UI 与存量 SharedPreferences 脱节；
+ * 3. 所有磁盘读写切到 IO 线程，返回不可变 List，防止 Compose 重组时拿到被外部改动的可变集合。
+ *
+ * 敏感字段（appSecret / apiKey）由 Config 层与 SecretStore 处理：
+ * loadBots() 返回真值、saveBots() 自动写入保险箱并把 JSON 落成占位符，
+ * 因此 Repository 不做加解密，只负责“不要在界面上明文展示”。
+ */
+class BotForgeRepository {
+
+    // ------------------------------------------------------------------ Bot
+
+    suspend fun bots(): List<Config.Bot> = withContext(Dispatchers.IO) {
+        Config.loadBots().toList()
+    }
+
+    suspend fun findBot(id: String): Config.Bot? = withContext(Dispatchers.IO) {
+        Config.loadBots().firstOrNull { it.id == id }
+    }
+
+    suspend fun saveBot(bot: Config.Bot): Unit = withContext(Dispatchers.IO) {
+        val list = Config.loadBots()
+        val index = list.indexOfFirst { it.id == bot.id }
+        if (index >= 0) list[index] = bot else list.add(bot)
+        Config.saveBots(list)
+    }
+
+    suspend fun deleteBot(id: String): Unit = withContext(Dispatchers.IO) {
+        val list = Config.loadBots()
+        list.removeAll { it.id == id }
+        Config.saveBots(list)
+    }
+
+    suspend fun setBotEnabled(id: String, enabled: Boolean): Unit =
+        withContext(Dispatchers.IO) {
+            val list = Config.loadBots()
+            val index = list.indexOfFirst { it.id == id }
+            if (index >= 0) {
+                list[index] = list[index].copy(enabled = enabled)
+                Config.saveBots(list)
+            }
+        }
+
+    /** 保存某机器人下的群配置。 */
+    suspend fun saveGroups(botId: String, groups: List<Config.GroupCfg>): Unit =
+        withContext(Dispatchers.IO) {
+            val list = Config.loadBots()
+            val index = list.indexOfFirst { it.id == botId }
+            if (index >= 0) {
+                list[index] = list[index].copy(groups = groups)
+                Config.saveBots(list)
+            }
+        }
+
+    // -------------------------------------------------------------- Persona
+
+    suspend fun personas(): List<Config.Persona> = withContext(Dispatchers.IO) {
+        Config.loadPersonas().toList()
+    }
+
+    suspend fun findPersona(id: String): Config.Persona? = withContext(Dispatchers.IO) {
+        Config.loadPersonas().firstOrNull { it.id == id }
+    }
+
+    suspend fun savePersona(persona: Config.Persona): Unit = withContext(Dispatchers.IO) {
+        val list = Config.loadPersonas()
+        val index = list.indexOfFirst { it.id == persona.id }
+        if (index >= 0) list[index] = persona else list.add(persona)
+        Config.savePersonas(list)
+    }
+
+    suspend fun deletePersona(id: String): Unit = withContext(Dispatchers.IO) {
+        val list = Config.loadPersonas()
+        list.removeAll { it.id == id }
+        Config.savePersonas(list)
+    }
+
+    // ---------------------------------------------------------------- Model
+
+    suspend fun models(): List<Config.Model> = withContext(Dispatchers.IO) {
+        Config.loadModels().toList()
+    }
+
+    suspend fun findModel(id: String): Config.Model? = withContext(Dispatchers.IO) {
+        Config.loadModels().firstOrNull { it.id == id }
+    }
+
+    suspend fun saveModel(model: Config.Model): Unit = withContext(Dispatchers.IO) {
+        val list = Config.loadModels()
+        val index = list.indexOfFirst { it.id == model.id }
+        if (index >= 0) list[index] = model else list.add(model)
+        Config.saveModels(list)
+    }
+
+    suspend fun deleteModel(id: String): Unit = withContext(Dispatchers.IO) {
+        val list = Config.loadModels()
+        list.removeAll { it.id == id }
+        Config.saveModels(list)
+    }
+
+    /**
+     * 模型被多少个机器人引用。任务书要求显示“默认模型”，
+     * 但 Config.Model 里并没有该字段（见审计报告），
+     * 因此这里改为展示真实可计算的引用次数，不虚构字段。
+     */
+    suspend fun modelRefCount(modelId: String): Int = withContext(Dispatchers.IO) {
+        Config.loadBots().count { it.modelId == modelId }
+    }
+
+    suspend fun newId(prefix: String): String = withContext(Dispatchers.IO) {
+        Config.newId(prefix)
+    }
+
+    // --------------------------------------------------------------- Logger
+
+    suspend fun logs(): List<Logger.Line> = withContext(Dispatchers.IO) {
+        Logger.snapshot()
+    }
+
+    suspend fun clearLogs(): Unit = withContext(Dispatchers.IO) {
+        Logger.clear()
+    }
+
+    // ------------------------------------------------------------ BotManager
+
+    fun serviceStatus(): String = BotManager.status()
+
+    fun runningCount(): Int = BotManager.count()
+
+    suspend fun reloadBots(context: Context): Unit = withContext(Dispatchers.IO) {
+        BotManager.reload(context.applicationContext)
+    }
+}
