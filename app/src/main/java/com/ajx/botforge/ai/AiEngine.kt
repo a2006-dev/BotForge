@@ -32,13 +32,33 @@ object AiEngine {
         history: List<Msg>,
         user: String,
         temperature: Float,
-        maxTokens: Int
+        maxTokens: Int,
+        images: List<String> = emptyList()
     ): String? {
         return if (model.type == "anthropic") {
-            chatAnthropic(model, system, history, user, temperature, maxTokens)
+            chatAnthropic(model, system, history, user, temperature, maxTokens, images)
         } else {
-            chatOpenAi(model, system, history, user, temperature, maxTokens)
+            chatOpenAi(model, system, history, user, temperature, maxTokens, images)
         }
+    }
+
+    /** 构造 user 内容：有图时用多模态数组，无图时用纯字符串 */
+    private fun userContent(user: String, images: List<String>): Any {
+        if (images.isEmpty()) return user
+        val arr = JSONArray()
+        arr.put(
+            JSONObject()
+                .put("type", "text")
+                .put("text", user.ifBlank { "看看这几张图，说说你的想法。" })
+        )
+        images.forEach { url ->
+            arr.put(
+                JSONObject()
+                    .put("type", "image_url")
+                    .put("image_url", JSONObject().put("url", url))
+            )
+        }
+        return arr
     }
 
     private fun chatOpenAi(
@@ -47,7 +67,8 @@ object AiEngine {
         history: List<Msg>,
         user: String,
         temperature: Float,
-        maxTokens: Int
+        maxTokens: Int,
+        images: List<String> = emptyList()
     ): String? {
         val url = normalizeBase(model.baseUrl)
         val msgs = JSONArray()
@@ -55,7 +76,7 @@ object AiEngine {
             msgs.put(JSONObject().put("role", "system").put("content", system))
         }
         history.forEach { msgs.put(JSONObject().put("role", it.role).put("content", it.content)) }
-        msgs.put(JSONObject().put("role", "user").put("content", user))
+        msgs.put(JSONObject().put("role", "user").put("content", userContent(user, images)))
 
         val body = JSONObject()
             .put("model", model.model)
@@ -105,7 +126,8 @@ object AiEngine {
         history: List<Msg>,
         user: String,
         temperature: Float,
-        maxTokens: Int
+        maxTokens: Int,
+        images: List<String> = emptyList()
     ): String? {
         var base = model.baseUrl.trim().trimEnd('/')
         val url = if (base.endsWith("/messages")) base else "$base/v1/messages"
@@ -117,7 +139,29 @@ object AiEngine {
                     .put("content", it.content)
             )
         }
-        msgs.put(JSONObject().put("role", "user").put("content", user))
+
+        // Anthropic 的图片用 source.base64 而不是 data URL
+        val userBlocks = JSONArray()
+        userBlocks.put(
+            JSONObject().put("type", "text")
+                .put("text", user.ifBlank { if (images.isEmpty()) "" else "看看这几张图，说说你的想法。" })
+        )
+        images.forEach { dataUrl ->
+            val idx = dataUrl.indexOf("base64,")
+            if (idx < 0) return@forEach
+            val b64 = dataUrl.substring(idx + 7)
+            userBlocks.put(
+                JSONObject()
+                    .put("type", "image")
+                    .put(
+                        "source", JSONObject()
+                            .put("type", "base64")
+                            .put("media_type", "image/jpeg")
+                            .put("data", b64)
+                    )
+            )
+        }
+        msgs.put(JSONObject().put("role", "user").put("content", userBlocks))
 
         val body = JSONObject()
             .put("model", model.model)

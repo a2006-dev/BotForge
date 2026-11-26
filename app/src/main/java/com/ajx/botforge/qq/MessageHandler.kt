@@ -2,6 +2,7 @@ package com.ajx.botforge.qq
 
 import android.content.Context
 import com.ajx.botforge.ai.AiEngine
+import com.ajx.botforge.ai.ImageUtil
 import com.ajx.botforge.ai.Intent
 import com.ajx.botforge.ai.Memory
 import com.ajx.botforge.ai.WebSearch
@@ -100,7 +101,8 @@ object MessageHandler {
 
         // 联网
         var userContent = text
-        if (Config.searchEnabled && shouldSearch(text)) {
+        val hasImage = ev.images.isNotEmpty()
+        if (!hasImage && Config.searchEnabled && shouldSearch(text)) {
             try {
                 val q = text
                 Logger.i("Search", "检索: $q")
@@ -115,11 +117,29 @@ object MessageHandler {
             }
         }
 
+        // 图片：下载 + 压缩 + 转 data URL
+        var imagePayload: List<String> = emptyList()
+        if (hasImage) {
+            val loaded = ImageUtil.loadAll(ev.images, limit = 3)
+            if (loaded.isEmpty()) {
+                Logger.w("Img", "图片全部加载失败，按纯文字处理")
+                if (text.isBlank()) {
+                    reply(bot, ev, "图没加载出来，再发一次？")
+                    return
+                }
+            } else {
+                imagePayload = loaded.map { it.dataUrl }
+                sb.append("\n\n【看图要求】用户发了 ${loaded.size} 张图片，请结合图片内容回答，说到图里的具体东西，别只说“我看到一张图片”。")
+                Logger.i("Img", "准备 ${loaded.size} 张图送入模型")
+            }
+        }
+
         // 调用
         val answer = AiEngine.chat(
             model, sb.toString(), history, userContent,
             persona?.temperature ?: 0.8f,
-            persona?.maxTokens ?: model.maxTokens
+            persona?.maxTokens ?: model.maxTokens,
+            imagePayload
         )
 
         if (answer == null) {

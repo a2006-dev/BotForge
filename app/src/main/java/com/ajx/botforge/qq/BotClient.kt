@@ -27,8 +27,24 @@ class BotClient(
         val userOpenId: String,
         val messageId: String,
         val content: String,
-        val raw: JSONObject
+        val raw: JSONObject,
+        /** 图片附件 URL 列表（可能为空） */
+        val images: List<String> = emptyList()
     )
+
+    /** 从事件 d 里解析图片附件 */
+    private fun parseImages(d: JSONObject): List<String> {
+        val arr = d.optJSONArray("attachments") ?: return emptyList()
+        val out = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            val a = arr.optJSONObject(i) ?: continue
+            val type = a.optString("content_type", "")
+            if (!type.startsWith("image/")) continue
+            val url = a.optString("url", "")
+            if (url.isNotEmpty()) out.add(url)
+        }
+        return out
+    }
 
     private val session = QqApi.Session(cfg.appId, cfg.appSecret)
     private var ws: WsClient? = null
@@ -231,11 +247,12 @@ class BotClient(
         val msgId = d.optString("id")
         val content = d.optString("content").trim()
         val author = d.optJSONObject("author")?.optString("member_openid") ?: ""
+        val images = parseImages(d)
 
-        if (!accept(groupOpenId, msgId, content)) return
+        if (!accept(groupOpenId, msgId, content, images.isNotEmpty())) return
 
-        val ev = Event("group", groupOpenId, author, msgId, content, d)
-        Logger.i("Bot", "→ 群消息 ${content.take(40)}")
+        val ev = Event("group", groupOpenId, author, msgId, content, d, images)
+        Logger.i("Bot", "→ 群消息 ${content.take(40)}${if (images.isNotEmpty()) " [图${images.size}]" else ""}")
         runCatching { handler(ev) }.onFailure {
             Logger.e("Bot", "处理异常: ${it.message}")
         }
@@ -247,18 +264,19 @@ class BotClient(
             ?: d.optString("user_openid")
         val msgId = d.optString("id")
         val content = d.optString("content").trim()
+        val images = parseImages(d)
 
-        if (!accept("c2c:$userOpenId", msgId, content)) return
+        if (!accept("c2c:$userOpenId", msgId, content, images.isNotEmpty())) return
 
-        val ev = Event("c2c", "", userOpenId, msgId, content, d)
-        Logger.i("Bot", "→ 私聊消息 ${content.take(40)}")
+        val ev = Event("c2c", "", userOpenId, msgId, content, d, images)
+        Logger.i("Bot", "→ 私聊消息 ${content.take(40)}${if (images.isNotEmpty()) " [图${images.size}]" else ""}")
         runCatching { handler(ev) }.onFailure {
             Logger.e("Bot", "处理异常: ${it.message}")
         }
     }
 
-    /** 统一过滤：去重 + 群开关 + 空内容 */
-    private fun accept(key: String, msgId: String, content: String): Boolean {
+    /** 统一过滤：去重 + 群开关 + 空内容（有图时不算空） */
+    private fun accept(key: String, msgId: String, content: String, hasImage: Boolean = false): Boolean {
         if (msgId.isEmpty()) return false
         synchronized(seen) {
             if (seen.containsKey(msgId)) {
@@ -267,7 +285,7 @@ class BotClient(
             }
             seen[msgId] = System.currentTimeMillis()
         }
-        if (content.isEmpty()) return false
+        if (content.isEmpty() && !hasImage) return false
 
         if (key.startsWith("c2c:")) return true
 
