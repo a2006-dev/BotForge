@@ -58,6 +58,11 @@ jobs:
             echo "keystore.properties written"
           fi
 
+      - name: Unit tests
+        run: |
+          gradle :app:testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee test.log
+          exit ${PIPESTATUS[0]}
+
       - name: Build debug
         run: |
           gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
