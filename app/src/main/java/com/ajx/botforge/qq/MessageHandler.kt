@@ -166,12 +166,16 @@ object MessageHandler {
 
     private fun reply(bot: Config.Bot, ev: BotClient.Event, text: String) {
         val chunks = splitMessage(text)
+        // 被动回复必须带上原消息 msg_id，且同一 msg_id 下的多条回复 msg_seq 需递增，
+        // 否则平台会判定为重复或直接拒收
+        var seq = 1
         chunks.forEach { c ->
             try {
                 when (ev.scene) {
-                    "group" -> QqApi.sendGroup(bot, ev.groupOpenId!!, c)
-                    "c2c" -> QqApi.sendC2C(bot, ev.userOpenId!!, c)
+                    "group" -> QqApi.sendGroup(bot, ev.groupOpenId, c, ev.messageId.ifEmpty { null }, seq)
+                    "c2c" -> QqApi.sendC2C(bot, ev.userOpenId, c, ev.messageId.ifEmpty { null }, seq)
                 }
+                seq++
             } catch (e: Exception) {
                 Logger.w("Msg", "发送失败: ${e.message}")
             }

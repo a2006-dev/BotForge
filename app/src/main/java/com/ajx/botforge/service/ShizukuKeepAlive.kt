@@ -145,9 +145,10 @@ object ShizukuKeepAlive {
     /** 把自己加入电池优化白名单（shell 权限可直接做） */
     fun whitelistBattery(ctx: Context): Boolean {
         val pkg = ctx.packageName
-        val r = exec("dpm set-device-owner $pkg 2>/dev/null; " +
-                "cmd deviceidle whitelist +$pkg")
-        val ok = !r.contains("Error") && !r.contains("Exception")
+        // 只做电池白名单。不要用 dpm set-device-owner：
+        // 那是把设备变成受管设备，属于系统级不可逆改动，普通 App 不应触碰
+        val r = exec("cmd deviceidle whitelist +$pkg 2>&1")
+        val ok = !r.contains("Error") && !r.contains("Exception") && !r.contains("Unknown")
         Logger.i(TAG, "电池白名单: ${if (ok) "已加入" else r.take(100)}")
         return ok
     }

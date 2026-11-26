@@ -54,6 +54,8 @@ class BotClient(
     @Volatile private var running = false
     @Volatile private var seq: Int = 0
     @Volatile private var interval: Long = 41250
+    /** 最后一次收到心跳 ACK（op=11）的时间，用于判断连接是否假死 */
+    @Volatile private var lastAckAt: Long = 0L
     @Volatile private var sessionId: String = ""
     @Volatile private var botName: String = ""
 
@@ -117,9 +119,11 @@ class BotClient(
         val helloObj = JSONObject(hello)
         val op = helloObj.optInt("op", -1)
         if (op != 10) throw IllegalStateException("首个包不是 HELLO: op=$op")
-        // 心跳周期：取服务端下发值与 30s 的较小者，避免下发值偏大导致被提前踢
+        // 心跳周期：先按 15s 验证（AstrBot 等实现常用 15~30s）。
+        // 过长的间隔会让空闲连接被中间网络设备掐断
         val raw = helloObj.optJSONObject("d")?.optLong("heartbeat_interval", 41250) ?: 41250
-        interval = if (raw > 30000L) 30000L else raw
+        val cap = 15000L
+        interval = if (raw > cap) cap else raw
         Logger.i("Bot", "心跳间隔 ${interval}ms（服务端下发 ${raw}ms）")
 
         // 2. 鉴权
@@ -184,13 +188,26 @@ class BotClient(
     private fun startHeartbeat(client: WsClient) {
         heartbeatThread = Thread({
             var alive = true
+            var missCount = 0
             // 第一次心跳立即发送：QQ 网关要求连接建立后尽快收到首个心跳，
             // 若先等满 interval 再发，服务端常在这段空闲期内主动断连
             var first = true
+            lastAckAt = System.currentTimeMillis()
             while (alive && running && client.isAlive()) {
                 if (!first) sleepQuiet(interval)
                 first = false
                 if (!running || !client.isAlive()) break
+
+                // 检查上一次心跳是否收到 ACK。连续 2 次没 ACK 说明连接已假死，
+                // 主动关闭触发重连，比等 TCP 超时快得多
+                val sinceAck = System.currentTimeMillis() - lastAckAt
+                if (sinceAck > interval * 2 + 5000L) {
+                    missCount++
+                    Logger.w("Bot", "心跳无 ACK ${sinceAck}ms，主动重连（第 ${missCount} 次）")
+                    runCatching { client.close() }
+                    break
+                }
+
                 runCatching {
                     val p = JSONObject().apply {
                         put("op", 1)
@@ -234,7 +251,7 @@ class BotClient(
                     else -> if (t.isNotEmpty()) Logger.i("Bot", "事件 $t（未处理）")
                 }
             }
-            11 -> { /* 心跳 ACK */ }
+            11 -> { /* 心跳 ACK */ lastAckAt = System.currentTimeMillis() }
             7 -> {
                 Logger.w("Bot", "收到重连指令")
                 runCatching { ws?.close() }

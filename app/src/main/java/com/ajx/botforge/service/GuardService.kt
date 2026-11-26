@@ -2,6 +2,7 @@ package com.ajx.botforge.service
 
 import android.app.Notification
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
@@ -65,7 +66,9 @@ class GuardService : Service() {
     }
 
     private fun checkMain() {
-        val alive = BotService.instance != null
+        // 注意：GuardService 跑在 :guard 进程，BotService.instance 是主进程的静态字段，
+        // 在这里永远为 null，不能用来判活。必须跨进程查询服务状态。
+        val alive = isBotServiceRunning()
         if (!alive) {
             Logger.w("Guard", "主服务不在，尝试拉起")
             // 第一层：常规拉起
@@ -84,6 +87,20 @@ class GuardService : Service() {
                 val ok = ShizukuKeepAlive.startService(applicationContext)
                 Logger.i("Guard", "提权拉起结果: $ok")
             }
+        }
+    }
+
+    /** 跨进程判断 BotService 是否存活 */
+    private fun isBotServiceRunning(): Boolean {
+        return try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            @Suppress("DEPRECATION")
+            val services = am.getRunningServices(Int.MAX_VALUE)
+            services.any { it.service.className == BotService::class.java.name }
+        } catch (e: Exception) {
+            // 查询失败时保守认为存活，避免无谓重启造成循环
+            Logger.w("Guard", "查询服务状态失败: ${e.message}")
+            true
         }
     }
 
