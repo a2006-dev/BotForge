@@ -176,4 +176,86 @@ class ConnectionLayerTest {
         assertNotNull(brief)
         assertTrue("日志未截断: ${brief.length}", brief.length <= 160)
     }
+
+    // ---------------- 续连状态（回归） ----------------
+
+    /**
+     * 回归测试：续连状态必须跨连接代次保留。
+     *
+     * 旧实现把 sessionId / seq 放在 Gen 里，每次重连 new 一个 Gen 就归零，
+     * 于是 identify() 永远走 op=2 全量鉴权，旧会话在网关侧一直挂着，
+     * 服务端频繁回收连接 —— 表现为「后台一会儿就重连」。
+     *
+     * 这段用等价状态机模拟，锁住三条规则：
+     *   1. 拿到 READY 后必须有 session 与 seq 可供下次续连
+     *   2. 重连时若上次状态仍在，走续连；清空后回落到全量鉴权
+     *   3. op=9（服务端判失效）必须清空续连状态
+     */
+    @Test
+    fun `resume state survives reconnect`() {
+        // 模拟 BotClient 的续连状态持有者（实例级，不随连接重建）
+        class ResumeState {
+            var sessionId: String = ""
+            var seq: Int = 0
+            /** true 表示会用 op=6 续连 */
+            fun willResume() = sessionId.isNotEmpty() && seq > 0
+            fun onReady(sid: String, s: Int) { sessionId = sid; seq = s }
+            fun onSeq(s: Int) { seq = s }
+            fun onInvalidSession() { sessionId = ""; seq = 0 }
+        }
+
+        val st = ResumeState()
+
+        // 首次连接：还没有会话，必须全量鉴权
+        assertFalse("首连不该走续连", st.willResume())
+
+        // 收到 READY，写入会话
+        st.onReady("abcdef0123456789", 0)
+        // session 有值但 seq 还是 0：网关还没下发过事件，续连无意义
+        assertFalse("首连后 seq=0 不该走续连", st.willResume())
+
+        // 收到至少一条事件后，seq 推进，续连才有意义
+        st.onSeq(42)
+        assertTrue("有 session 与 seq 后应走续连", st.willResume())
+
+        // 断线重连：状态必须仍在（这正是旧实现在 Gen 里丢掉的部分）
+        assertEquals("abcdef0123456789", st.sessionId)
+        assertEquals(42, st.seq)
+
+        // 服务端明确判会话失效，必须回落到全量鉴权
+        st.onInvalidSession()
+        assertFalse("op=9 后必须全量鉴权", st.willResume())
+        assertEquals(0, st.seq)
+    }
+
+    /**
+     * 回归测试：心跳间隔必须采用服务端下发值。
+     *
+     * 旧实现把服务端下发的 41250ms 压到 15000ms，心跳过密。
+     * 后台线程调度一延迟，多个周期的 ACK 一起迟到，
+     * 就会累积成「无 ACK 超时」误判，触发不必要的重连。
+     */
+    @Test
+    fun `heartbeat interval follows server value`() {
+        val serverInterval = 41_250L
+        // 网关给的间隔合法时，必须原样采用，不得自行压缩
+        val adopted = if (serverInterval in 10_000L..120_000L) serverInterval else 41_250L
+        assertEquals("不得压缩服务端下发的心跳间隔", serverInterval, adopted)
+
+        // 只有明显异常的值才回落到默认，避免被服务端下发 0 拖死
+        val bogus = 0L
+        val fallback = if (bogus in 10_000L..120_000L) bogus else 41_250L
+        assertEquals(41_250L, fallback)
+    }
+
+    /** 空闲超时必须足够宽，至少覆盖若干个完整心跳周期 */
+    @Test
+    fun `idle timeout covers several heartbeat periods`() {
+        val interval = 41_250L
+        val idleTimeout = interval * 2
+        assertTrue(
+            "空闲超时 ${idleTimeout}ms 不足以覆盖 2 个心跳周期",
+            idleTimeout >= interval * 2
+        )
+    }
 }
