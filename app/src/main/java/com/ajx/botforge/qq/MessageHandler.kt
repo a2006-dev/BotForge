@@ -6,7 +6,9 @@ import com.ajx.botforge.ai.ImageUtil
 import com.ajx.botforge.ai.Intent
 import com.ajx.botforge.ai.Memory
 import com.ajx.botforge.ai.WebSearch
+import com.ajx.botforge.data.AuthStore
 import com.ajx.botforge.data.Config
+import com.ajx.botforge.data.GroupRegistry
 import com.ajx.botforge.data.Logger
 import com.ajx.botforge.ai.tool.AgentLoop
 import com.ajx.botforge.ai.tool.BuiltinTools
@@ -36,6 +38,14 @@ object MessageHandler {
         // 群策略
         var cooldown = 5
         if (ev.scene == "group") {
+            // 先登记这个群，再判策略。
+            // 顺序很重要：官方没有「列出全部群」的接口，群是被动发现的。
+            // 如果先判策略再登记，那些还没被用户配置过的群永远进不了
+            // 「已发现群」列表 —— 用户就永远无从开启它们，形成死锁。
+            // 所以这里先记一笔（纯观察，不产生任何回复），再按配置决定是否响应。
+            runCatching {
+                GroupRegistry.noteGroupEvent(bot.id, ev.groupOpenId, ev.userOpenId)
+            }
             val g = bot.groups.firstOrNull { it.groupOpenId == ev.groupOpenId }
             if (g == null || !g.enabled) {
                 Logger.i("Msg", "群未启用，忽略 ${ev.groupOpenId}")
@@ -289,6 +299,93 @@ object MessageHandler {
                 reply(bot, ev, helpText())
                 true
             }
+            // ------------------------------------------------ 主人绑定
+            // 参考云崽：#设置主人 → 机器人回验证码 → 用户原样回复。
+            // 本项目把「生成」放在 APP 里（避免任何人在群里就能触发绑定流程，
+            // 那样等于把主人位开放给第一个看到消息的人），
+            // 群里只负责「校验并绑定」，所以这里只有一条指令。
+            "/绑定主人", "/bindowner", "/设置主人" -> {
+                val code = text.trim().split(Regex("\\s+")).getOrNull(1).orEmpty()
+                if (code.isEmpty()) {
+                    reply(bot, ev, "用法：/绑定主人 验证码\n验证码请先在 BotForge APP 的「主人绑定」页生成。")
+                    return true
+                }
+                if (AuthStore.hasOwner) {
+                    val isMe = AuthStore.ownerOpenId == ev.userOpenId
+                    reply(
+                        bot, ev,
+                        if (isMe) "你已经是主人了，无需重复绑定。"
+                        else "本机器人已绑定主人，如需更换请先在 APP 里解除绑定。"
+                    )
+                    return true
+                }
+                val r = AuthStore.consumeCode(code)
+                r.onSuccess {
+                    AuthStore.bindOwner(ev.userOpenId, ev.raw.optString("username", ""))
+                    Logger.i("Auth", "主人已绑定：${AuthStore.mask(ev.userOpenId)}")
+                    reply(
+                        bot, ev,
+                        "✅ 绑定成功，你现在是本机器人的主人。\n" +
+                            "openid：${AuthStore.mask(ev.userOpenId)}\n" +
+                            "发送 /help 查看可用指令。"
+                    )
+                }.onFailure { e ->
+                    reply(bot, ev, "❌ " + (e.message ?: "绑定失败"))
+                }
+                true
+            }
+            "/解除主人", "/unbindowner" -> {
+                if (!AuthStore.isOwnerOnly(ev.userOpenId)) {
+                    reply(bot, ev, "⛔ 只有主人本人可以解除绑定。")
+                    return true
+                }
+                AuthStore.unbindOwner()
+                reply(bot, ev, "已解除主人绑定。")
+                true
+            }
+            // ------------------------------------------------ 授权管理
+            "/授权", "/addadmin" -> {
+                if (!AuthStore.isOwnerOnly(ev.userOpenId)) {
+                    reply(bot, ev, "⛔ 只有主人可以授予管理员。")
+                    return true
+                }
+                val arg = text.trim().split(Regex("\\s+")).getOrNull(1).orEmpty()
+                // 不带参数 = 把当前群设为管理员范围，授权给「发送者」自身。
+                // 这是群里最常用的路径：主人在某个群里发 /授权，就把自己设成该群管理员。
+                val target = if (arg.isEmpty()) ev.userOpenId else arg
+                val scope = if (ev.scene == "group") ev.groupOpenId else ""
+                val r = AuthStore.addAdmin(
+                    AuthStore.Admin(openId = target, scope = scope, note = "由主人授权")
+                )
+                reply(
+                    bot, ev,
+                    r.fold(
+                        onSuccess = {
+                            "✅ 已授权管理员：${AuthStore.mask(target)}\n" +
+                                "范围：" + (if (scope.isEmpty()) "全局（任何场景生效）" else "仅本群")
+                        },
+                        onFailure = { "❌ " + (it.message ?: "授权失败") }
+                    )
+                )
+                true
+            }
+            "/取消授权", "/rmadmin" -> {
+                if (!AuthStore.isOwnerOnly(ev.userOpenId)) {
+                    reply(bot, ev, "⛔ 只有主人可以撤销管理员。")
+                    return true
+                }
+                val arg = text.trim().split(Regex("\\s+")).getOrNull(1).orEmpty()
+                val target = if (arg.isEmpty()) ev.userOpenId else arg
+                val scope = if (ev.scene == "group") ev.groupOpenId else ""
+                // 先尝试精确匹配（同群），再退化到全局条目
+                var ok = AuthStore.removeAdmin(target, scope)
+                if (!ok) ok = AuthStore.removeAdmin(target, "")
+                reply(
+                    bot, ev,
+                    if (ok) "已撤销管理员：${AuthStore.mask(target)}" else "未找到该管理员。"
+                )
+                true
+            }
             else -> handlePlugin(bot, ev, text, cmd)
         }
     }
@@ -304,9 +401,18 @@ object MessageHandler {
     /** 生成帮助文本，内置指令 + 当前场景可用的插件指令 */
     private fun helpText(): String {
         val sb = StringBuilder("内置指令\n")
-        sb.append("/reset 清空上下文\n/ping 测试在线\n/help 本说明\n")
-        sb.append("/whoami 查看我的 openid\n/allow 把自己加入白名单\n")
+        sb.append("/{reset,clear} 清空上下文\n/{ping,在吗} 测试在线\n/{help,帮助} 本说明\n")
+        sb.append("/{whoami,我是谁} 查看我的 openid 与角色\n")
+        sb.append("/allow 把自己加入插件白名单\n")
         sb.append("/plugins 插件列表 · /reload-plugins 重扫目录\n")
+        // 权限相关指令只在有主人才提示，避免无关用户看到一堆用不了的命令
+        if (AuthStore.hasOwner) {
+            sb.append("\n权限指令\n")
+            sb.append("/绑定主人 验证码 — 首次绑定（验证码在 APP 生成）\n")
+            sb.append("/授权 [openid] — 主人授予管理员，群内使用则限本群\n")
+            sb.append("/取消授权 [openid] — 主人撤销管理员\n")
+            sb.append("/解除主人 — 主人解除绑定\n")
+        }
         val plug = PluginRegistry.all()
         if (plug.isEmpty()) {
             sb.append("\n（未安装插件）")
@@ -366,10 +472,21 @@ object MessageHandler {
             val sb = StringBuilder()
             sb.append("场景：").append(if (ev.scene == "group") "群聊" else "私聊").append("\n")
             sb.append("你的 openid：\n").append(ev.userOpenId).append("\n")
-            if (ev.scene == "group") {
-                sb.append("\n本群 openid：\n").append(ev.groupOpenId)
+            // 群友辨别的核心：把当前角色直接告诉用户，
+            // 否则用户根本不知道自己在这个群里算什麼身份（官方不给 QQ 号，只能靠 openid）。
+            val role = AuthStore.roleOf(ev.userOpenId, ev.groupOpenId)
+            sb.append("\n你在本场景的身份：").append(role.label).append("\n")
+            if (role == AuthStore.Role.USER && AuthStore.hasOwner) {
+                sb.append("（如需管理员权限，请让主人发送 /授权 ").append(ev.userOpenId).append("）\n")
             }
-            sb.append("\n\n白名单用户数：").append(PluginGuard.allowedUsers().size)
+            if (ev.scene == "group") {
+                sb.append("\n本群 openid：\n").append(ev.groupOpenId).append("\n")
+                sb.append("注意：QQ 官方不提供真实群号，只有这个加密 openid。\n")
+            }
+            // 同一用户跨群 openid 不同，把这一点明说，
+            // 否则用户会疑惑「为什么我在 A 群是管理员，在 B 群不是」。
+            sb.append("\n提示：同一账号在不同群/单聊里的 openid 不同，\n授权只在对应场景生效。\n")
+            sb.append("\n白名单用户数：").append(PluginGuard.allowedUsers().size)
             sb.append("\n群聊插件：").append(if (PluginGuard.groupEnabled) "已开启" else "未开启")
             reply(bot, ev, sb.toString())
             return true

@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.screens
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -33,12 +35,9 @@ import com.ajx.botforge.ui.components.StatusBadge
 import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.components.TextButton
 import com.ajx.botforge.ui.data.BotForgeRepository
-import com.ajx.botforge.ui.theme.Bg1
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +52,7 @@ fun PersonaEditScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit
 ) {
+    val c = botColors
     val repo = remember { BotForgeRepository() }
     val scope = rememberCoroutineScope()
 
@@ -123,9 +123,9 @@ fun PersonaEditScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Bg1)) {
+    Column(modifier = Modifier.fillMaxSize().background(c.bg1)) {
         PageTopBar(
-            title = if (isNew) "新建人设" else "编辑人设",
+            title = if (isNew) Txt.PERSONA_NEW else Txt.PERSONA_EDIT,
             subtitle = if (isNew) null else name,
             onBack = onBack
         )
@@ -152,11 +152,11 @@ fun PersonaEditScreen(
             )
             Spacer(Modifier.height(Spacing.md))
             MultilineField(
-                label = "人格描述（Prompt）",
+                label = Txt.PERSONA_PROMPT_LABEL,
                 value = prompt,
                 onValueChange = { prompt = it },
                 placeholder = "描述它的身份、性格、说话方式与边界……",
-                helper = "这段文本会作为 system prompt 发给模型"
+                helper = Txt.FIELD_PROMPT_HELP
             )
             Spacer(Modifier.height(Spacing.md))
             FormField(
@@ -187,18 +187,18 @@ fun PersonaEditScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "启用上下文记忆",
-                        color = TextHigh,
+                        color = c.textHigh,
                         fontSize = FontSize.body,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
                         text = "关闭后每次对话都是全新会话",
-                        color = TextLow,
+                        color = c.textLow,
                         fontSize = FontSize.caption
                     )
                 }
                 StatusBadge(
-                    text = if (memoryEnabled) "开" else "关",
+                    text = if (memoryEnabled) Txt.ON else Txt.OFF,
                     tone = if (memoryEnabled) StatusTone.Success else StatusTone.Neutral
                 )
             }
@@ -221,7 +221,7 @@ fun PersonaEditScreen(
                 onValueChange = { temperature = it.filter { c -> c.isDigit() || c == '.' } },
                 placeholder = "0.8",
                 keyboardType = KeyboardType.Decimal,
-                helper = "0 ~ 2，越大越发散"
+                helper = Txt.FIELD_TEMP_HELP
             )
             Spacer(Modifier.height(Spacing.md))
             FormField(
@@ -230,12 +230,12 @@ fun PersonaEditScreen(
                 onValueChange = { maxTokens = it.filter { c -> c.isDigit() } },
                 placeholder = "400",
                 keyboardType = KeyboardType.Number,
-                helper = "单条回复的最大 token 数"
+                helper = Txt.FIELD_TOKENS_HELP
             )
 
             Spacer(Modifier.height(Spacing.xl))
             PrimaryButton(
-                text = if (isNew) "创建人设" else "保存修改",
+                text = if (isNew) Txt.PERSONA_CREATE else Txt.BOT_SAVE,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = canSave,
                 loading = saving,
@@ -243,9 +243,9 @@ fun PersonaEditScreen(
             )
             Spacer(Modifier.height(Spacing.sm))
             TextButton(
-                text = "取消",
+                text = Txt.CANCEL,
                 modifier = Modifier.fillMaxWidth(),
-                color = TextMid,
+                color = c.textMid,
                 onClick = onBack
             )
             Spacer(Modifier.height(Spacing.xl))

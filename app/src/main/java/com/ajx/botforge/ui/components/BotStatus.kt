@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.components
 
+import com.ajx.botforge.ui.text.Txt
+
 /**
  * 语义状态（设计规范 §1 / 提示词 §4.1）
  *
@@ -26,12 +28,12 @@ enum class BotStatus(
     /** 状态下方的一句话说明，StatusHero 用 */
     val hint: String
 ) {
-    ONLINE("在线", StatusTone.Success, "服务运行中，机器人会正常响应"),
-    CONNECTING("连接中", StatusTone.Info, "正在建立网关连接"),
-    RECONNECTING("重连中", StatusTone.Warning, "连接中断，正在自动重连"),
-    ERROR("异常", StatusTone.Danger, "连接出现异常，需要处理"),
-    PAUSED("已暂停", StatusTone.Neutral, "你已手动停止，不会被自动拉起"),
-    OFFLINE("离线", StatusTone.Neutral, "服务未运行，机器人不会响应");
+    ONLINE(Txt.BOT_STATE_ONLINE, StatusTone.Success, Txt.BOT_HINT_ONLINE),
+    CONNECTING(Txt.BOT_STATE_CONNECTING, StatusTone.Info, Txt.BOT_HINT_CONNECTING),
+    RECONNECTING(Txt.BOT_STATE_RECONNECTING, StatusTone.Warning, Txt.BOT_HINT_RECONNECTING),
+    ERROR(Txt.BOT_STATE_ERROR, StatusTone.Danger, Txt.BOT_HINT_ERROR),
+    PAUSED(Txt.BOT_STATE_PAUSED, StatusTone.Neutral, Txt.BOT_PAUSED_DESC),
+    OFFLINE(Txt.BOT_STATE_OFFLINE, StatusTone.Neutral, Txt.BOT_OFFLINE_DESC);
 
     /** 只有 ONLINE 算健康，用于概览计数 */
     val isHealthy: Boolean get() = this == ONLINE

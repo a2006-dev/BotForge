@@ -25,21 +25,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.ajx.botforge.ui.theme.Bg3
-import com.ajx.botforge.ui.theme.Bg4
-import com.ajx.botforge.ui.theme.Brand
-import com.ajx.botforge.ui.theme.BrandDisabled
-import com.ajx.botforge.ui.theme.BrandPressed
 import com.ajx.botforge.ui.theme.ButtonShape
-import com.ajx.botforge.ui.theme.Danger
-import com.ajx.botforge.ui.theme.DangerGhost
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
-import com.ajx.botforge.ui.theme.LineStrong
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
+import com.ajx.botforge.ui.theme.botColors
 
 /**
  * 主按钮：品牌蓝实心
@@ -56,13 +46,14 @@ fun PrimaryButton(
     icon: ImageVector? = null,
     onClick: () -> Unit
 ) {
+    val c = botColors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
     val bg = when {
-        !enabled -> BrandDisabled
-        pressed -> BrandPressed
-        else -> Brand
+        !enabled -> c.brandDisabled
+        pressed -> c.brandPressed
+        else -> c.brand
     }
 
     Box(
@@ -82,7 +73,7 @@ fun PrimaryButton(
         if (loading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(Sizes.icon),
-                color = TextHigh,
+                color = c.textHigh,
                 strokeWidth = 2.dp
             )
         } else {
@@ -95,12 +86,12 @@ fun PrimaryButton(
                         imageVector = icon,
                         contentDescription = null,
                         modifier = Modifier.size(Sizes.icon),
-                        tint = if (enabled) TextHigh else TextLow
+                        tint = if (enabled) c.textHigh else c.textLow
                     )
                 }
                 Text(
                     text = text,
-                    color = if (enabled) TextHigh else TextLow,
+                    color = if (enabled) c.textHigh else c.textLow,
                     fontSize = FontSize.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -122,14 +113,15 @@ fun SecondaryButton(
     icon: ImageVector? = null,
     onClick: () -> Unit
 ) {
+    val c = botColors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
     Box(
         modifier = modifier
             .height(Sizes.buttonHeight)
-            .background(if (pressed) Bg4 else Bg3, ButtonShape)
-            .botBorder(if (pressed) LineStrong else Line)
+            .background(if (pressed) c.bg4 else c.bg3, ButtonShape)
+            .botBorder(if (pressed) c.lineStrong else c.line)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -148,12 +140,12 @@ fun SecondaryButton(
                     imageVector = icon,
                     contentDescription = null,
                     modifier = Modifier.size(Sizes.icon),
-                    tint = TextHigh
+                    tint = c.textHigh
                 )
             }
             Text(
                 text = text,
-                color = if (enabled) TextHigh else TextLow,
+                color = if (enabled) c.textHigh else c.textLow,
                 fontSize = FontSize.body,
                 fontWeight = FontWeight.Medium
             )
@@ -174,13 +166,14 @@ fun DangerButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val c = botColors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
     Box(
         modifier = modifier
             .height(Sizes.buttonHeight)
-            .background(if (pressed) Danger.copy(alpha = 0.24f) else DangerGhost, ButtonShape)
+            .background(if (pressed) c.danger.copy(alpha = 0.24f) else c.dangerGhost, ButtonShape)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -192,7 +185,7 @@ fun DangerButton(
     ) {
         Text(
             text = text,
-            color = Danger,
+            color = c.danger,
             fontSize = FontSize.body,
             fontWeight = FontWeight.Medium
         )
@@ -212,22 +205,23 @@ fun SmallButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val c = botColors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
     val bg = when {
-        primary && !enabled -> BrandDisabled
-        primary && pressed -> BrandPressed
-        primary -> Brand
-        pressed -> Bg4
-        else -> Bg3
+        primary && !enabled -> c.brandDisabled
+        primary && pressed -> c.brandPressed
+        primary -> c.brand
+        pressed -> c.bg4
+        else -> c.bg3
     }
 
     Box(
         modifier = modifier
             .height(Sizes.buttonSmall)
             .background(bg, ButtonShape)
-            .then(if (primary) Modifier else Modifier.botBorder(if (pressed) LineStrong else Line))
+            .then(if (primary) Modifier else Modifier.botBorder(if (pressed) c.lineStrong else c.line))
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -239,7 +233,7 @@ fun SmallButton(
     ) {
         Text(
             text = text,
-            color = if (primary) TextHigh else if (enabled) TextHigh else TextLow,
+            color = if (primary) c.textHigh else if (enabled) c.textHigh else c.textLow,
             fontSize = FontSize.small,
             fontWeight = FontWeight.Medium
         )
@@ -255,10 +249,11 @@ fun SmallButton(
 fun TextButton(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = Brand,
+    color: Color = c.brand,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val c = botColors
     Box(
         modifier = modifier
             .defaultMinSize(minHeight = Sizes.touchTarget)
@@ -268,7 +263,7 @@ fun TextButton(
     ) {
         Text(
             text = text,
-            color = if (enabled) color else TextLow,
+            color = if (enabled) color else c.textLow,
             fontSize = FontSize.body,
             fontWeight = FontWeight.Medium
         )
@@ -283,10 +278,11 @@ fun IconTextButton(
     icon: ImageVector,
     contentDescription: String,
     modifier: Modifier = Modifier,
-    tint: Color = TextHigh,
+    tint: Color = c.textHigh,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val c = botColors
     Box(
         modifier = modifier
             .size(Sizes.touchTarget)
@@ -297,7 +293,7 @@ fun IconTextButton(
             imageVector = icon,
             contentDescription = contentDescription,
             modifier = Modifier.size(Sizes.iconLarge),
-            tint = if (enabled) tint else TextLow
+            tint = if (enabled) tint else c.textLow
         )
     }
 }

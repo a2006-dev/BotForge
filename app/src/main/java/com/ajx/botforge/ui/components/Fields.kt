@@ -36,18 +36,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.sp
-import com.ajx.botforge.ui.theme.Bg3
-import com.ajx.botforge.ui.theme.Brand
-import com.ajx.botforge.ui.theme.Danger
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.InputShape
-import com.ajx.botforge.ui.theme.Line
-import com.ajx.botforge.ui.theme.LineStrong
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
+import com.ajx.botforge.ui.text.Txt
 
 /**
  * 表单字段：标签 + 输入框 + 可选说明
@@ -68,10 +62,11 @@ fun FormField(
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next
 ) {
+    val c = botColors
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = label,
-            color = TextMid,
+            color = c.textMid,
             fontSize = FontSize.small,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(start = Spacing.xxs, bottom = Spacing.sm)
@@ -92,7 +87,7 @@ fun FormField(
         if (hint != null) {
             Text(
                 text = hint,
-                color = if (error != null) Danger else TextLow,
+                color = if (error != null) c.danger else c.textLow,
                 fontSize = FontSize.caption,
                 modifier = Modifier.padding(
                     start = Spacing.xxs,
@@ -122,13 +117,14 @@ fun AppTextField(
     isError: Boolean = false,
     minHeight: androidx.compose.ui.unit.Dp = Sizes.inputMin
 ) {
+    val c = botColors
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
 
     val borderColor = when {
-        isError -> Danger
-        focused -> Brand
-        else -> Line
+        isError -> c.danger
+        focused -> c.brand
+        else -> c.line
     }
 
     BasicTextField(
@@ -137,14 +133,14 @@ fun AppTextField(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = minHeight)
-            .background(Bg3, InputShape)
+            .background(c.bg3, InputShape)
             .border(Sizes.hairline, borderColor, InputShape)
             .padding(
                 horizontal = Spacing.md,
                 vertical = if (singleLine) Spacing.md else Spacing.md
             ),
         textStyle = LocalTextStyle.current.copy(
-            color = TextHigh,
+            color = c.textHigh,
             fontSize = FontSize.body
         ),
         singleLine = singleLine,
@@ -152,14 +148,14 @@ fun AppTextField(
             keyboardType = keyboardType,
             imeAction = imeAction
         ),
-        cursorBrush = SolidColor(Brand),
+        cursorBrush = SolidColor(c.brand),
         interactionSource = interaction,
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
                     Text(
                         text = placeholder,
-                        color = TextLow,
+                        color = c.textLow,
                         fontSize = FontSize.body
                     )
                 }
@@ -185,20 +181,21 @@ fun PasswordField(
     helper: String? = null,
     error: String? = null
 ) {
+    val c = botColors
     var visible by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
 
     val borderColor = when {
-        error != null -> Danger
-        focused -> Brand
-        else -> Line
+        error != null -> c.danger
+        focused -> c.brand
+        else -> c.line
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = label,
-            color = TextMid,
+            color = c.textMid,
             fontSize = FontSize.small,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(start = Spacing.xxs, bottom = Spacing.sm)
@@ -208,7 +205,7 @@ fun PasswordField(
             modifier = Modifier
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = Sizes.inputMin)
-                .background(Bg3, InputShape)
+                .background(c.bg3, InputShape)
                 .border(Sizes.hairline, borderColor, InputShape)
                 .padding(start = Spacing.md, end = Spacing.xs),
             verticalAlignment = Alignment.CenterVertically,
@@ -219,7 +216,7 @@ fun PasswordField(
                 onValueChange = onValueChange,
                 modifier = Modifier.weight(1f),
                 textStyle = LocalTextStyle.current.copy(
-                    color = TextHigh,
+                    color = c.textHigh,
                     fontSize = FontSize.body
                 ),
                 singleLine = true,
@@ -229,14 +226,14 @@ fun PasswordField(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Next
                 ),
-                cursorBrush = SolidColor(Brand),
+                cursorBrush = SolidColor(c.brand),
                 interactionSource = interaction,
                 decorationBox = { inner ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (value.isEmpty() && placeholder.isNotEmpty()) {
                             Text(
                                 text = placeholder,
-                                color = TextLow,
+                                color = c.textLow,
                                 fontSize = FontSize.body
                             )
                         }
@@ -246,8 +243,8 @@ fun PasswordField(
             )
             IconTextButton(
                 icon = if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                contentDescription = if (visible) "隐藏" else "显示",
-                tint = TextMid,
+                contentDescription = if (visible) Txt.CD_HIDE else Txt.CD_SHOW,
+                tint = c.textMid,
                 onClick = { visible = !visible }
             )
         }
@@ -256,7 +253,7 @@ fun PasswordField(
         if (hint != null) {
             Text(
                 text = hint,
-                color = if (error != null) Danger else TextLow,
+                color = if (error != null) c.danger else c.textLow,
                 fontSize = FontSize.caption,
                 modifier = Modifier.padding(start = Spacing.xxs, top = Spacing.xs)
             )
@@ -281,13 +278,14 @@ fun MultilineField(
     error: String? = null,
     minHeight: androidx.compose.ui.unit.Dp = Sizes.inputMultiline
 ) {
+    val c = botColors
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
 
     val borderColor = when {
-        error != null -> Danger
-        focused -> Brand
-        else -> LineStrong
+        error != null -> c.danger
+        focused -> c.brand
+        else -> c.lineStrong
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -298,13 +296,13 @@ fun MultilineField(
         ) {
             Text(
                 text = label,
-                color = TextMid,
+                color = c.textMid,
                 fontSize = FontSize.small,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "${value.length} 字",
-                color = TextLow,
+                text = String.format(Txt.CHAR_COUNT_FMT, value.length),
+                color = c.textLow,
                 fontSize = FontSize.caption
             )
         }
@@ -315,11 +313,11 @@ fun MultilineField(
             modifier = Modifier
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = minHeight)
-                .background(Bg3, InputShape)
+                .background(c.bg3, InputShape)
                 .border(Sizes.hairline, borderColor, InputShape)
                 .padding(Spacing.md),
             textStyle = LocalTextStyle.current.copy(
-                color = TextHigh,
+                color = c.textHigh,
                 fontSize = FontSize.body,
                 lineHeight = (FontSize.body.value * 1.5f).sp
             ),
@@ -328,14 +326,14 @@ fun MultilineField(
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Default
             ),
-            cursorBrush = SolidColor(Brand),
+            cursorBrush = SolidColor(c.brand),
             interactionSource = interaction,
             decorationBox = { inner ->
                 Box {
                     if (value.isEmpty() && placeholder.isNotEmpty()) {
                         Text(
                             text = placeholder,
-                            color = TextLow,
+                            color = c.textLow,
                             fontSize = FontSize.body
                         )
                     }
@@ -348,7 +346,7 @@ fun MultilineField(
         if (hint != null) {
             Text(
                 text = hint,
-                color = if (error != null) Danger else TextLow,
+                color = if (error != null) c.danger else c.textLow,
                 fontSize = FontSize.caption,
                 modifier = Modifier.padding(start = Spacing.xxs, top = Spacing.xs)
             )
@@ -366,12 +364,13 @@ fun SearchField(
     modifier: Modifier = Modifier,
     placeholder: String = "搜索"
 ) {
+    val c = botColors
     Row(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = Sizes.inputMin)
-            .background(Bg3, InputShape)
-            .border(Sizes.hairline, Line, InputShape)
+            .background(c.bg3, InputShape)
+            .border(Sizes.hairline, c.line, InputShape)
             .padding(horizontal = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
@@ -380,23 +379,23 @@ fun SearchField(
             imageVector = Icons.Filled.Search,
             contentDescription = null,
             modifier = Modifier.size(Sizes.icon),
-            tint = TextLow
+            tint = c.textLow
         )
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.weight(1f),
             textStyle = LocalTextStyle.current.copy(
-                color = TextHigh,
+                color = c.textHigh,
                 fontSize = FontSize.body
             ),
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            cursorBrush = SolidColor(Brand),
+            cursorBrush = SolidColor(c.brand),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
                     if (value.isEmpty()) {
-                        Text(placeholder, color = TextLow, fontSize = FontSize.body)
+                        Text(placeholder, color = c.textLow, fontSize = FontSize.body)
                     }
                     inner()
                 }
@@ -406,7 +405,7 @@ fun SearchField(
             IconTextButton(
                 icon = Icons.Filled.Close,
                 contentDescription = "清除",
-                tint = TextLow,
+                tint = c.textLow,
                 onClick = { onValueChange("") }
             )
         }

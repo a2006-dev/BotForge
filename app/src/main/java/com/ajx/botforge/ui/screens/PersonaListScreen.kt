@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.screens
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,13 +38,9 @@ import com.ajx.botforge.ui.components.SmallButton
 import com.ajx.botforge.ui.components.StatusBadge
 import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.components.TextButton
-import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Danger
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 import com.ajx.botforge.ui.viewmodel.PersonaListViewModel
 
 @Composable
@@ -50,6 +48,7 @@ fun PersonaListScreen(
     onBack: () -> Unit,
     onEdit: (String?) -> Unit
 ) {
+    val c = botColors
     val vm: PersonaListViewModel = viewModel()
     val state by vm.state.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<Config.Persona?>(null) }
@@ -57,11 +56,11 @@ fun PersonaListScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Bg1)
+            .background(c.bg1)
     ) {
         PageTopBar(
-            title = "人设",
-            subtitle = if (state.personas.isEmpty()) null else "${state.personas.size} 条",
+            title = Txt.PERSONA_TITLE,
+            subtitle = if (state.personas.isEmpty()) null else String.format(Txt.LIST_COUNT_PERSONA_FMT, state.personas.size),
             onBack = onBack
         )
 
@@ -77,8 +76,8 @@ fun PersonaListScreen(
                 if (state.personas.isEmpty()) {
                     item {
                         EmptyState(
-                            title = "还没有人设",
-                            description = "人设决定机器人如何说话：人格提示词、语气、称呼与记忆深度",
+                            title = Txt.PERSONA_EMPTY_TITLE,
+                            description = Txt.PERSONA_EMPTY_DESC,
                             icon = "✎"
                         )
                     }
@@ -96,7 +95,7 @@ fun PersonaListScreen(
                 item {
                     Spacer(Modifier.height(Spacing.sm))
                     PrimaryButton(
-                        text = "新建人设",
+                        text = Txt.PERSONA_NEW,
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onEdit(null) }
                     )
@@ -108,13 +107,13 @@ fun PersonaListScreen(
     pendingDelete?.let { persona ->
         val refs = state.usage[persona.id] ?: 0
         ConfirmDialog(
-            title = "删除人设",
+            title = Txt.PERSONA_DELETE_TITLE,
             message = if (refs > 0) {
-                "「${persona.name}」正被 $refs 个机器人使用，删除后这些机器人将失去人设。"
+                String.format(Txt.CONFIRM_REF_PERSONA_FMT, persona.name, refs)
             } else {
-                "确定删除「${persona.name}」？此操作不可撤销。"
+                String.format(Txt.CONFIRM_DELETE_PERSONA, persona.name)
             },
-            confirmText = "删除",
+            confirmText = Txt.DELETE,
             danger = true,
             onConfirm = {
                 vm.delete(persona.id)
@@ -132,6 +131,7 @@ private fun PersonaCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val c = botColors
     AppCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -139,22 +139,27 @@ private fun PersonaCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = persona.name.ifBlank { "未命名人设" },
-                    color = TextHigh,
+                    text = persona.name.ifBlank { Txt.PERSONA_UNTITLED },
+                    color = c.textHigh,
                     fontSize = FontSize.title,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(Spacing.xxs))
                 Text(
-                    text = "称呼「${persona.address.ifBlank { "你" }}」 · 温度 ${persona.temperature} · 上限 ${persona.maxTokens} 字",
-                    color = TextMid,
+                    text = String.format(
+                        Txt.PERSONA_SUMMARY_FMT,
+                        persona.address.ifBlank { Txt.NONE },
+                        persona.temperature.toString(),
+                        persona.maxTokens
+                    ),
+                    color = c.textMid,
                     fontSize = FontSize.caption
                 )
             }
             if (refCount > 0) {
-                StatusBadge(text = "$refCount 个机器人", tone = StatusTone.Info)
+                StatusBadge(text = String.format(Txt.PERSONA_REF_FMT, refCount), tone = StatusTone.Info)
             } else {
-                StatusBadge(text = "未使用", tone = StatusTone.Neutral)
+                StatusBadge(text = Txt.UNUSED, tone = StatusTone.Neutral)
             }
         }
 
@@ -162,7 +167,7 @@ private fun PersonaCard(
             Spacer(Modifier.height(Spacing.sm))
             Text(
                 text = persona.prompt,
-                color = TextLow,
+                color = c.textLow,
                 fontSize = FontSize.small,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
@@ -173,11 +178,11 @@ private fun PersonaCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = if (persona.memoryEnabled) {
-                    "记忆开启 · 保留 ${persona.memoryDepth} 条"
+                    String.format(Txt.PERSONA_MEMORY_FMT, persona.memoryDepth)
                 } else {
                     "记忆关闭"
                 },
-                color = TextMid,
+                color = c.textMid,
                 fontSize = FontSize.caption
             )
         }
@@ -187,9 +192,9 @@ private fun PersonaCard(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SmallButton(text = "编辑", primary = true, onClick = onEdit)
+            SmallButton(text = Txt.EDIT, primary = true, onClick = onEdit)
             Spacer(Modifier.width(Spacing.md))
-            TextButton(text = "删除", color = Danger, onClick = onDelete)
+            TextButton(text = Txt.DELETE, color = c.danger, onClick = onDelete)
         }
     }
 }

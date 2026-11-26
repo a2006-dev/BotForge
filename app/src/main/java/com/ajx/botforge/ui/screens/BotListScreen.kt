@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.screens
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ajx.botforge.data.Config
@@ -37,12 +38,9 @@ import com.ajx.botforge.ui.components.SmallButton
 import com.ajx.botforge.ui.components.StatusBadge
 import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.components.TextButton
-import com.ajx.botforge.ui.theme.Bg1
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 import com.ajx.botforge.ui.viewmodel.BotListViewModel
 
 @Composable
@@ -51,6 +49,7 @@ fun BotListScreen(
     onEdit: (String?) -> Unit,
     onGroups: (String) -> Unit
 ) {
+    val c = botColors
     val vm: BotListViewModel = viewModel()
     val state by vm.state.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<Config.Bot?>(null) }
@@ -58,15 +57,15 @@ fun BotListScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Bg1)
+            .background(c.bg1)
     ) {
         PageTopBar(
-            title = "机器人",
+            title = Txt.DASH_SECTION_BOTS,
             subtitle = if (state.bots.isEmpty()) null else
-                "共 ${state.bots.size} 个 · ${state.enabledCount} 个已启用",
+                String.format(Txt.LIST_BOT_SUMMARY_FMT, state.bots.size, state.enabledCount),
             onBack = onBack,
             actions = {
-                TextButton(text = "刷新", onClick = { vm.refresh() })
+                TextButton(text = Txt.REFRESH, onClick = { vm.refresh() })
             }
         )
 
@@ -82,8 +81,8 @@ fun BotListScreen(
                 if (state.bots.isEmpty()) {
                     item {
                         EmptyState(
-                            title = "还没有机器人",
-                            description = "添加一个官方机器人应用，填入 AppID 与密钥后即可接入",
+                            title = Txt.BOT_LIST_EMPTY_TITLE,
+                            description = Txt.BOT_LIST_EMPTY_DESC,
                             icon = "＋"
                         )
                     }
@@ -102,7 +101,7 @@ fun BotListScreen(
                 item {
                     Spacer(Modifier.height(Spacing.sm))
                     PrimaryButton(
-                        text = "添加机器人",
+                        text = Txt.DASH_EMPTY_BOT_ACTION,
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onEdit(null) }
                     )
@@ -113,9 +112,9 @@ fun BotListScreen(
 
     pendingDelete?.let { bot ->
         ConfirmDialog(
-            title = "删除机器人",
-            message = "将删除「${bot.name}」及其 ${bot.groups.size} 条群配置，此操作不可撤销。",
-            confirmText = "删除",
+            title = Txt.BOT_DELETE_TITLE,
+            message = String.format(Txt.CONFIRM_DELETE_BOT, bot.name, bot.groups.size),
+            confirmText = Txt.DELETE,
             danger = true,
             onConfirm = {
                 vm.delete(bot.id)
@@ -134,6 +133,7 @@ private fun BotCard(
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
+    val c = botColors
     AppCard {
         // 第一层：名称 + 状态
         Row(
@@ -143,19 +143,19 @@ private fun BotCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = bot.name,
-                    color = TextHigh,
+                    color = c.textHigh,
                     fontSize = FontSize.title,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(Spacing.xxs))
                 Text(
-                    text = "AppID ${bot.appId}",
-                    color = TextLow,
+                    text = String.format(Txt.BOT_APPID_FMT, bot.appId),
+                    color = c.textLow,
                     fontSize = FontSize.caption
                 )
             }
             StatusBadge(
-                text = if (bot.enabled) "已启用" else "已禁用",
+                text = if (bot.enabled) Txt.ENABLED else Txt.DISABLED,
                 tone = if (bot.enabled) StatusTone.Success else StatusTone.Neutral
             )
         }
@@ -165,20 +165,20 @@ private fun BotCard(
         // 第二层：元信息 + 缺失警示
         val enabledGroups = bot.groups.count { it.enabled }
         Text(
-            text = if (bot.groups.isEmpty()) "未配置群" else
-                "${bot.groups.size} 个群 · ${enabledGroups} 个已启用",
-            color = TextMid,
+            text = if (bot.groups.isEmpty()) Txt.BOT_NO_GROUP else
+                String.format(Txt.LIST_COUNT_GROUP_FMT, bot.groups.size, enabledGroups),
+            color = c.textMid,
             fontSize = FontSize.small
         )
 
         val missing = buildList {
-            if (bot.personaId.isEmpty()) add("人设")
-            if (bot.modelId.isEmpty()) add("模型")
+            if (bot.personaId.isEmpty()) add(Txt.LABEL_PERSONA)
+            if (bot.modelId.isEmpty()) add(Txt.LABEL_MODEL)
         }
         if (missing.isNotEmpty()) {
             Spacer(Modifier.height(Spacing.xs))
             StatusBadge(
-                text = "未绑定" + missing.joinToString("、"),
+                text = Txt.NOT_BOUND + missing.joinToString("、"),
                 tone = StatusTone.Warning
             )
         }
@@ -190,16 +190,16 @@ private fun BotCard(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SmallButton(text = "编辑", primary = true, onClick = onEdit)
+            SmallButton(text = Txt.EDIT, primary = true, onClick = onEdit)
             Spacer(Modifier.width(Spacing.sm))
-            SmallButton(text = "群管理", onClick = onGroups)
+            SmallButton(text = Txt.BOT_MANAGE_GROUP, onClick = onGroups)
             Spacer(Modifier.width(Spacing.sm))
             SmallButton(
-                text = if (bot.enabled) "禁用" else "启用",
+                text = if (bot.enabled) Txt.DISABLE else Txt.ENABLE,
                 onClick = { onToggle(!bot.enabled) }
             )
             Box(modifier = Modifier.weight(1f))
-            TextButton(text = "删除", color = com.ajx.botforge.ui.theme.Danger, onClick = onDelete)
+            TextButton(text = Txt.DELETE, color = c.danger, onClick = onDelete)
         }
     }
 }

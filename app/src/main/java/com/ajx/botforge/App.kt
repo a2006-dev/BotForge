@@ -14,9 +14,16 @@ class App : Application() {
         instance = this
         Config.init(this)
         com.ajx.botforge.plugin.PluginRegistry.init(this)
-        com.ajx.botforge.plugin.PluginGuard.init(
-            getSharedPreferences("botforge", MODE_PRIVATE)
-        )
+        val prefs = getSharedPreferences("botforge", MODE_PRIVATE)
+        com.ajx.botforge.plugin.PluginGuard.init(prefs)
+        // 主人/管理员授权体系。复用同一个 prefs 文件，
+        // 这样导出配置时不会漏掉授权状态（换机恢复后不用重新绑定）。
+        com.ajx.botforge.data.AuthStore.init(prefs)
+        // 已发现群登记簿：被动收集 group_openid。
+        // 官方没有「列出全部群」的接口，只能靠收消息时顺手记一笔。
+        com.ajx.botforge.data.GroupRegistry.init(prefs)
+        // 主题偏好灌入内存，供根 Composition 读取
+        com.ajx.botforge.ui.data.UiPrefs.load()
         com.ajx.botforge.data.Logger.i("App", "BotForge 启动 v${BuildConfig.VERSION_NAME}")
         createChannels()
     }

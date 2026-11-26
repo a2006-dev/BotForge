@@ -1,0 +1,62 @@
+name: 功能建议
+description: 提出新功能或改进现有行为
+title: "[建议] 简述建议"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        建议类的 Issue 请说清楚「解决什么问题」，而不只是「加一个什么功能」。
+        前者能讨论，后者只能照做或拒绝。
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 类别
+      options:
+        - 界面与交互
+        - 机器人能力
+        - 内置终端
+        - 工具包
+        - 插件
+        - 文档
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决的问题
+      description: 描述当前遇到的困难，不要先讲解决方案
+      placeholder: |
+        例如：现在想在手机上跑一个需要 Python 的脚本，但不知道终端里装了没有，
+        每次都要先敲命令确认。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议的方案
+      description: 如果有具体想法写在这里。没有也可以只写问题
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案
+      description: 说明一下为什么现有做法不够用
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 自查
+      options:
+        - label: 已搜索过现有 Issue，没有重复
+          required: true
+        - label: 已阅读 CHANGELOG 中的「已知限制」，确认不属于已知边界
+          required: true

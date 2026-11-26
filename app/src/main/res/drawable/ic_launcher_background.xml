@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 与角色发色呼应的淡蓝白，自适应图标背景层不支持渐变矩形以外的花活 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E8F0FF" />
+</shape>

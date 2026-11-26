@@ -3,7 +3,6 @@ package com.ajx.botforge.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
 

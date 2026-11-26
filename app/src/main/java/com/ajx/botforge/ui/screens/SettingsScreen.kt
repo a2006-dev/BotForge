@@ -33,19 +33,12 @@ import com.ajx.botforge.data.Config
 import com.ajx.botforge.ui.components.PageTopBar
 import com.ajx.botforge.ui.components.SectionHeader
 import com.ajx.botforge.ui.components.SmallButton
-import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Bg2
-import com.ajx.botforge.ui.theme.Bg4
-import com.ajx.botforge.ui.theme.Brand
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
-import com.ajx.botforge.ui.theme.LineStrong
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
+import com.ajx.botforge.ui.text.Txt
 
 /**
  * 设置中心。
@@ -62,6 +55,7 @@ fun SettingsScreen(
     onApplyShizuku: () -> Unit,
     onReloadBots: () -> Unit
 ) {
+    val c = botColors
     var autoStart by remember { mutableStateOf(true) }
     var keepAlive by remember { mutableStateOf(true) }
     var autoRestart by remember { mutableStateOf(true) }
@@ -83,7 +77,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Bg1)
+            .background(c.bg1)
     ) {
         PageTopBar(title = "设置", onBack = onBack)
 
@@ -160,7 +154,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "搜索触发方式",
-                            color = TextHigh,
+                            color = c.textHigh,
                             fontSize = FontSize.body,
                             fontWeight = FontWeight.Medium
                         )
@@ -170,12 +164,12 @@ fun SettingsScreen(
                             } else {
                                 "关键词命中即搜索"
                             },
-                            color = TextLow,
+                            color = c.textLow,
                             fontSize = FontSize.caption
                         )
                     }
                     SmallButton(
-                        text = if (searchTrigger == "model") "模型自主" else "关键词",
+                        text = if (searchTrigger == "model") Txt.SET_SEARCH_MODEL else Txt.SET_SEARCH_KEYWORD,
                         onClick = {
                             val next = if (searchTrigger == "model") "keyword" else "model"
                             searchTrigger = next
@@ -211,7 +205,7 @@ fun SettingsScreen(
                 )
                 SettingDivider()
                 ActionRow(
-                    title = "Shizuku 增强",
+                    title = Txt.SET_SHIZUKU,
                     desc = "一键放开后台限制",
                     action = "执行",
                     onClick = onApplyShizuku
@@ -235,11 +229,12 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingGroup(content: @Composable () -> Unit) {
+    val c = botColors
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.lg))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
+            .background(c.bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.lg))
     ) {
         content()
     }
@@ -247,12 +242,13 @@ private fun SettingGroup(content: @Composable () -> Unit) {
 
 @Composable
 private fun SettingDivider() {
+    val c = botColors
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = Spacing.md)
             .height(Sizes.hairline)
-            .background(Line)
+            .background(c.line)
     )
 }
 
@@ -263,6 +259,7 @@ private fun SwitchRow(
     checked: Boolean,
     onChange: (Boolean) -> Unit
 ) {
+    val c = botColors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -273,11 +270,11 @@ private fun SwitchRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = TextHigh,
+                color = c.textHigh,
                 fontSize = FontSize.body,
                 fontWeight = FontWeight.Medium
             )
-            Text(text = desc, color = TextLow, fontSize = FontSize.caption)
+            Text(text = desc, color = c.textLow, fontSize = FontSize.caption)
         }
         Spacer(Modifier.width(Spacing.md))
         TrackSwitch(checked = checked)
@@ -287,16 +284,17 @@ private fun SwitchRow(
 /** 自绘开关轨道，避免系统 Switch 的默认灰。 */
 @Composable
 private fun TrackSwitch(checked: Boolean) {
+    val c = botColors
     Box(
         modifier = Modifier
             .size(width = 44.dp, height = 26.dp)
             .background(
-                if (checked) Brand else Bg4,
+                if (checked) c.brand else c.bg4,
                 RoundedCornerShape(Radius.full)
             )
             .border(
                 Sizes.hairline,
-                if (checked) Brand else LineStrong,
+                if (checked) c.brand else c.lineStrong,
                 RoundedCornerShape(Radius.full)
             ),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
@@ -306,7 +304,7 @@ private fun TrackSwitch(checked: Boolean) {
                 .padding(horizontal = 3.dp)
                 .size(20.dp)
                 .background(
-                    if (checked) com.ajx.botforge.ui.theme.TextInverse else TextMid,
+                    if (checked) c.textInverse else c.textMid,
                     CircleShape
                 )
         )
@@ -320,6 +318,7 @@ private fun ActionRow(
     action: String,
     onClick: () -> Unit
 ) {
+    val c = botColors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -330,11 +329,11 @@ private fun ActionRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = TextHigh,
+                color = c.textHigh,
                 fontSize = FontSize.body,
                 fontWeight = FontWeight.Medium
             )
-            Text(text = desc, color = TextLow, fontSize = FontSize.caption)
+            Text(text = desc, color = c.textLow, fontSize = FontSize.caption)
         }
         Spacer(Modifier.width(Spacing.md))
         SmallButton(text = action, onClick = onClick)

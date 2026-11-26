@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.screens
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,17 +38,11 @@ import com.ajx.botforge.ui.components.StatusBadge
 import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.components.TextButton
 import com.ajx.botforge.ui.data.BotForgeRepository
-import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Bg2
-import com.ajx.botforge.ui.theme.Brand
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 import kotlinx.coroutines.launch
 
 /** 三类接口协议，与 Config.Model.type 注释里的取值一致。 */
@@ -68,6 +64,7 @@ fun ModelEditScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit
 ) {
+    val c = botColors
     val repo = remember { BotForgeRepository() }
     val scope = rememberCoroutineScope()
 
@@ -140,9 +137,9 @@ fun ModelEditScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Bg1)) {
+    Column(modifier = Modifier.fillMaxSize().background(c.bg1)) {
         PageTopBar(
-            title = if (isNew) "添加模型" else "编辑模型",
+            title = if (isNew) Txt.MODEL_ADD else Txt.MODEL_EDIT,
             subtitle = if (isNew) null else name,
             onBack = onBack
         )
@@ -165,28 +162,28 @@ fun ModelEditScreen(
                 label = "名称",
                 value = name,
                 onValueChange = { name = it },
-                placeholder = "例如：DeepSeek V4"
+                placeholder = Txt.MODEL_NAME_PLACEHOLDER
             )
             Spacer(Modifier.height(Spacing.md))
             FormField(
-                label = "Base URL",
+                label = Txt.MODEL_BASEURL_LABEL,
                 value = baseUrl,
                 onValueChange = { baseUrl = it },
                 placeholder = "http://127.0.0.1:7863/v1",
                 keyboardType = KeyboardType.Uri,
-                helper = "不含 /chat/completions，末尾斜杠会自动去掉"
+                helper = Txt.FIELD_BASEURL_HELP
             )
             Spacer(Modifier.height(Spacing.md))
             PasswordField(
-                label = "API Key",
+                label = Txt.MODEL_APIKEY_LABEL,
                 value = apiKey,
                 onValueChange = { apiKey = it },
-                placeholder = if (hasKey) "已保存，留空不修改" else "尚未配置",
+                placeholder = if (hasKey) Txt.MODEL_KEY_KEEP else Txt.NOT_SET,
                 helper = "保存在本地保险箱，界面不回显明文"
             )
             Spacer(Modifier.height(Spacing.sm))
             StatusBadge(
-                text = if (hasKey) "密钥已保存" else "密钥未配置",
+                text = if (hasKey) Txt.MODEL_KEY_SAVED else Txt.MODEL_KEY_MISSING,
                 tone = if (hasKey) StatusTone.Success else StatusTone.Warning
             )
             Spacer(Modifier.height(Spacing.md))
@@ -195,7 +192,7 @@ fun ModelEditScreen(
                 value = model,
                 onValueChange = { model = it },
                 placeholder = "deepseek-v4.1-flash",
-                helper = "请求体里的 model 字段"
+                helper = Txt.FIELD_MODEL_HELP
             )
 
             Spacer(Modifier.height(Spacing.lg))
@@ -233,7 +230,7 @@ fun ModelEditScreen(
 
             Spacer(Modifier.height(Spacing.xl))
             PrimaryButton(
-                text = if (isNew) "添加模型" else "保存修改",
+                text = if (isNew) Txt.MODEL_ADD else Txt.BOT_SAVE,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = canSave,
                 loading = saving,
@@ -241,9 +238,9 @@ fun ModelEditScreen(
             )
             Spacer(Modifier.height(Spacing.sm))
             TextButton(
-                text = "取消",
+                text = Txt.CANCEL,
                 modifier = Modifier.fillMaxWidth(),
-                color = TextMid,
+                color = c.textMid,
                 onClick = onBack
             )
             Spacer(Modifier.height(Spacing.xl))
@@ -258,15 +255,16 @@ private fun TypeChip(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val c = botColors
     Column(
         modifier = modifier
             .background(
-                if (selected) Brand.copy(alpha = 0.15f) else Bg2,
+                if (selected) c.brand.copy(alpha = 0.15f) else c.bg2,
                 RoundedCornerShape(Radius.sm)
             )
             .border(
                 Sizes.hairline,
-                if (selected) Brand else Line,
+                if (selected) c.brand else c.line,
                 RoundedCornerShape(Radius.sm)
             )
             .clickable(onClick = onClick)
@@ -275,7 +273,7 @@ private fun TypeChip(
     ) {
         Text(
             text = label,
-            color = if (selected) Brand else TextLow,
+            color = if (selected) c.brand else c.textLow,
             fontSize = FontSize.caption,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
         )

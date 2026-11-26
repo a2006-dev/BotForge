@@ -2,7 +2,6 @@ package com.ajx.botforge.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,15 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.ajx.botforge.ui.theme.Danger
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.LineHeight
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextMid
-import com.ajx.botforge.ui.theme.Warning
-import com.ajx.botforge.ui.theme.WarningGhost
+import com.ajx.botforge.ui.theme.botColors
+import com.ajx.botforge.ui.text.Txt
 
 /**
  * 异常聚合卡（提示词 §6.1）
@@ -53,17 +49,18 @@ fun AttentionCard(
     modifier: Modifier = Modifier,
     onIssueClick: ((AttentionIssue) -> Unit)? = null
 ) {
+    val c = botColors
     if (issues.isEmpty()) return
 
     val severe = issues.any { it.severe }
-    val accent = if (severe) Danger else Warning
+    val accent = if (severe) c.danger else c.warning
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(
                 // 严重问题用更实的底色，一般问题用 ghost
-                if (severe) Danger.copy(alpha = 0.14f) else WarningGhost,
+                if (severe) c.danger.copy(alpha = 0.14f) else c.warningGhost,
                 RoundedCornerShape(Radius.lg)
             )
             .padding(Spacing.lg)
@@ -79,7 +76,7 @@ fun AttentionCard(
             )
             Spacer(Modifier.size(Spacing.sm))
             Text(
-                text = if (issues.size == 1) "1 个问题需要处理" else "${issues.size} 个问题需要处理",
+                text = String.format(Txt.STATE_ISSUES_FMT, issues.size),
                 color = accent,
                 fontSize = FontSize.body,
                 lineHeight = LineHeight.normal,
@@ -112,7 +109,7 @@ fun AttentionCard(
                 Spacer(Modifier.size(Spacing.sm))
                 Text(
                     text = issue.text,
-                    color = TextHigh,
+                    color = c.textHigh,
                     fontSize = FontSize.small,
                     lineHeight = LineHeight.normal,
                     modifier = Modifier.weight(1f)
@@ -121,7 +118,7 @@ fun AttentionCard(
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = TextMid,
+                        tint = c.textMid,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -154,8 +151,8 @@ data class AttentionIssue(
 private fun AttentionCardPreview() {
     AttentionCard(
         issues = listOf(
-            AttentionIssue("通知权限未授予，后台保活受限", route = "permission"),
-            AttentionIssue("24 小时内断线 5 次，建议检查网络", actionable = false)
+            AttentionIssue(Txt.ISSUE_NO_NOTIFY, route = "permission"),
+            AttentionIssue(Txt.STATE_RECONNECT_WARN, actionable = false)
         ),
         modifier = Modifier.padding(16.dp)
     )

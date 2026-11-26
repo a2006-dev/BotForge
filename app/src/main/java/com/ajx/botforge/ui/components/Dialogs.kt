@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.components
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,14 +25,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.ajx.botforge.ui.theme.Bg2
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 
 /**
  * 自定义对话框外壳。使用 Dialog 只借其窗口层，内部完全自绘，
@@ -43,18 +42,19 @@ fun BotDialog(
     title: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val c = botColors
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .background(Bg2, RoundedCornerShape(Radius.xl))
-                .border(Sizes.hairline, Line, RoundedCornerShape(Radius.xl))
+                .background(c.bg2, RoundedCornerShape(Radius.xl))
+                .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.xl))
                 .padding(Spacing.lg)
         ) {
             if (title != null) {
                 Text(
                     text = title,
-                    color = TextHigh,
+                    color = c.textHigh,
                     fontSize = FontSize.title,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -70,16 +70,17 @@ fun BotDialog(
 fun ConfirmDialog(
     title: String,
     message: String,
-    confirmText: String = "确定",
-    dismissText: String = "取消",
+    confirmText: String = Txt.OK,
+    dismissText: String = Txt.CANCEL,
     danger: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val c = botColors
     BotDialog(onDismiss = onDismiss, title = title) {
         Text(
             text = message,
-            color = TextMid,
+            color = c.textMid,
             fontSize = FontSize.body
         )
         Spacer(Modifier.height(Spacing.lg))
@@ -110,6 +111,7 @@ fun PickDialog(
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val c = botColors
     BotDialog(onDismiss = onDismiss, title = title) {
         Column(
             modifier = Modifier
@@ -127,9 +129,9 @@ fun PickDialog(
                     Text(
                         text = if (index == selectedIndex) "●" else "○",
                         color = if (index == selectedIndex) {
-                            com.ajx.botforge.ui.theme.Brand
+                            c.brand
                         } else {
-                            TextMid
+                            c.textMid
                         },
                         fontSize = FontSize.body
                     )
@@ -137,13 +139,13 @@ fun PickDialog(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = label,
-                            color = TextHigh,
+                            color = c.textHigh,
                             fontSize = FontSize.body
                         )
                         if (sub.isNotEmpty()) {
                             Text(
                                 text = sub,
-                                color = TextMid,
+                                color = c.textMid,
                                 fontSize = FontSize.caption
                             )
                         }
@@ -156,7 +158,7 @@ fun PickDialog(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            SmallButton(text = "取消", onClick = onDismiss)
+            SmallButton(text = Txt.CANCEL, onClick = onDismiss)
         }
     }
 }

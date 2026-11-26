@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.components
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -34,9 +36,7 @@ import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.LineHeight
 import com.ajx.botforge.ui.theme.NumericStyle
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 
 /**
  * 首页状态主视觉（提示词 §6.1）
@@ -63,6 +63,7 @@ fun StatusHero(
     metrics: List<HeroMetric> = emptyList(),
     reduceMotion: Boolean = false
 ) {
+    val c = botColors
     Column(modifier = modifier.fillMaxWidth()) {
 
         // ---------- 状态 + 呼吸点 ----------
@@ -92,7 +93,7 @@ fun StatusHero(
         // ---------- 说明 ----------
         Text(
             text = subtitle ?: status.hint,
-            color = TextMid,
+            color = c.textMid,
             fontSize = FontSize.body,
             lineHeight = LineHeight.normal
         )
@@ -108,14 +109,14 @@ fun StatusHero(
                     Column(modifier = Modifier.weight(1f, fill = false)) {
                         Text(
                             text = m.label,
-                            color = TextLow,
+                            color = c.textLow,
                             fontSize = FontSize.caption,
                             lineHeight = LineHeight.tight
                         )
                         Spacer(Modifier.height(Spacing.xxs))
                         Text(
                             text = m.value,
-                            color = TextHigh,
+                            color = c.textHigh,
                             fontSize = FontSize.bodyLarge,
                             lineHeight = LineHeight.normal,
                             fontWeight = FontWeight.SemiBold,
@@ -201,13 +202,13 @@ private fun BreathingDot(
 
 // ---------------------------------------------------------------- 预览
 
-@Preview(name = "在线", showBackground = true, backgroundColor = 0xFF151A22)
+@Preview(name = Txt.BOT_STATE_ONLINE, showBackground = true, backgroundColor = 0xFF151A22)
 @Composable
 private fun StatusHeroOnlinePreview() {
     StatusHero(
         status = BotStatus.ONLINE,
         metrics = listOf(
-            HeroMetric("运行时长", "3 小时 12 分"),
+            HeroMetric(Txt.DASH_METRIC_UPTIME, "3 小时 12 分"),
             HeroMetric("最近消息", "2 分钟前"),
             HeroMetric("今日断线", "0 次")
         )
@@ -232,7 +233,7 @@ private fun StatusHeroPausedPreview() {
     StatusHero(status = BotStatus.PAUSED)
 }
 
-@Preview(name = "异常", showBackground = true, backgroundColor = 0xFF151A22)
+@Preview(name = Txt.BOT_STATE_ERROR, showBackground = true, backgroundColor = 0xFF151A22)
 @Composable
 private fun StatusHeroErrorPreview() {
     StatusHero(

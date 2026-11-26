@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.screens
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,16 +39,11 @@ import com.ajx.botforge.ui.components.SmallButton
 import com.ajx.botforge.ui.components.StatusBadge
 import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.data.BotForgeRepository
-import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Bg2
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +57,7 @@ fun GroupListScreen(
     botId: String,
     onBack: () -> Unit
 ) {
+    val c = botColors
     val repo = remember { BotForgeRepository() }
     val scope = rememberCoroutineScope()
 
@@ -75,16 +73,16 @@ fun GroupListScreen(
                 bot = repo.findBot(botId)
                 error = null
             } catch (e: Exception) {
-                error = e.message ?: "读取失败"
+                error = e.message ?: Txt.READ_FAILED
             }
         }
     }
 
     LaunchedEffect(botId) { reload() }
 
-    Column(modifier = Modifier.fillMaxSize().background(Bg1)) {
+    Column(modifier = Modifier.fillMaxSize().background(c.bg1)) {
         PageTopBar(
-            title = "群配置",
+            title = Txt.GROUP_TITLE,
             subtitle = bot?.name,
             onBack = onBack
         )
@@ -92,7 +90,7 @@ fun GroupListScreen(
         if (error != null) {
             Text(
                 text = error!!,
-                color = TextMid,
+                color = c.textMid,
                 fontSize = FontSize.caption,
                 modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)
             )
@@ -102,13 +100,13 @@ fun GroupListScreen(
 
         if (groups.isEmpty()) {
             EmptyState(
-                title = "还没有配置群",
-                description = "添加群后，机器人才会在该群响应 @ 消息。\ngroup_openid 可在群消息回调日志中获取。",
+                title = Txt.GROUP_EMPTY_TITLE,
+                description = Txt.GROUP_EMPTY_DESC,
                 icon = "＋",
                 modifier = Modifier.weight(1f),
                 action = {
                     PrimaryButton(
-                        text = "添加群",
+                        text = Txt.GROUP_ADD,
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
                             editing = null
@@ -176,9 +174,9 @@ fun GroupListScreen(
 
     pendingDelete?.let { g ->
         ConfirmDialog(
-            title = "删除群配置",
-            message = "确定删除「${g.note.ifBlank { g.groupOpenId }}」？此操作不可撤销。",
-            confirmText = "删除",
+            title = Txt.GROUP_DELETE_TITLE,
+            message = String.format(Txt.CONFIRM_DELETE_GROUP, g.note.ifBlank { g.groupOpenId }),
+            confirmText = Txt.DELETE,
             danger = true,
             onDismiss = { pendingDelete = null },
             onConfirm = {
@@ -200,29 +198,30 @@ private fun GroupCard(
     onDelete: () -> Unit,
     onToggle: () -> Unit
 ) {
+    val c = botColors
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.md))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.md))
+            .background(c.bg2, RoundedCornerShape(Radius.md))
+            .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.md))
             .padding(Spacing.md)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = group.note.ifBlank { "未命名群" },
-                    color = TextHigh,
+                    text = group.note.ifBlank { Txt.GROUP_UNTITLED },
+                    color = c.textHigh,
                     fontSize = FontSize.body,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = group.groupOpenId,
-                    color = TextLow,
+                    color = c.textLow,
                     fontSize = FontSize.caption
                 )
             }
             StatusBadge(
-                text = if (group.enabled) "已启用" else "已停用",
+                text = if (group.enabled) Txt.ENABLED else Txt.DISABLED,
                 tone = if (group.enabled) StatusTone.Success else StatusTone.Neutral
             )
         }
@@ -230,20 +229,20 @@ private fun GroupCard(
         Spacer(Modifier.height(Spacing.sm))
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(Spacing.sm)) {
             StatusBadge(
-                text = if (group.requireAt) "需 @" else "免 @",
+                text = if (group.requireAt) Txt.STATE_NEED_AT else Txt.STATE_NO_AT,
                 tone = if (group.requireAt) StatusTone.Info else StatusTone.Neutral
             )
             StatusBadge(
-                text = "冷却 ${group.cooldownSec}s",
+                text = String.format(Txt.GROUP_COOLDOWN_FMT, group.cooldownSec),
                 tone = StatusTone.Neutral
             )
         }
 
         Spacer(Modifier.height(Spacing.sm))
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(Spacing.sm)) {
-            SmallButton(text = "编辑", onClick = onEdit)
-            SmallButton(text = if (group.enabled) "停用" else "启用", primary = true, onClick = onToggle)
-            SmallButton(text = "删除", onClick = onDelete)
+            SmallButton(text = Txt.EDIT, onClick = onEdit)
+            SmallButton(text = if (group.enabled) Txt.DISABLE else Txt.ENABLE, primary = true, onClick = onToggle)
+            SmallButton(text = Txt.DELETE, onClick = onDelete)
         }
     }
 }
@@ -255,6 +254,7 @@ private fun GroupEditorDialog(
     onDismiss: () -> Unit,
     onSaved: () -> Unit
 ) {
+    val c = botColors
     val repo = remember { BotForgeRepository() }
     val scope = rememberCoroutineScope()
 
@@ -269,7 +269,7 @@ private fun GroupEditorDialog(
     fun submit() {
         val oid = openId.trim()
         if (oid.isEmpty()) {
-            error = "group_openid 必填"
+            error = Txt.GROUP_OPENID_REQUIRED
             return
         }
         val cd = cooldown.trim().toIntOrNull() ?: 5
@@ -292,62 +292,62 @@ private fun GroupEditorDialog(
                 onSaved()
             } catch (e: Exception) {
                 saving = false
-                error = e.message ?: "保存失败"
+                error = e.message ?: Txt.SAVE_FAILED
             }
         }
     }
 
     BotDialog(onDismiss = onDismiss) {
         Text(
-            text = if (existing == null) "添加群" else "编辑群",
-            color = TextHigh,
+            text = if (existing == null) Txt.GROUP_ADD else Txt.GROUP_EDIT,
+            color = c.textHigh,
             fontSize = FontSize.title,
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(Spacing.md))
 
         FormField(
-            label = "group_openid",
+            label = Txt.GROUP_OPENID_LABEL,
             value = openId,
             onValueChange = { openId = it },
-            placeholder = "群会话的 openid",
-            helper = "唯一键，群消息回调日志里能看到"
+            placeholder = Txt.GROUP_OPENID_PLACEHOLDER,
+            helper = Txt.FIELD_GROUPID_HELP
         )
         Spacer(Modifier.height(Spacing.md))
         FormField(
-            label = "备注名",
+            label = Txt.GROUP_NOTE_LABEL,
             value = note,
             onValueChange = { note = it },
-            placeholder = "例如：测试群"
+            placeholder = Txt.GROUP_NOTE_PLACEHOLDER
         )
         Spacer(Modifier.height(Spacing.md))
         FormField(
-            label = "冷却秒数",
+            label = Txt.GROUP_COOLDOWN_LABEL,
             value = cooldown,
             onValueChange = { cooldown = it.filter { c -> c.isDigit() } },
-            placeholder = "5",
+            placeholder = Txt.GROUP_COOLDOWN_PLACEHOLDER,
             keyboardType = KeyboardType.Number,
-            helper = "同一用户在该群的最短触发间隔"
+            helper = Txt.FIELD_COOLDOWN_HELP
         )
 
         Spacer(Modifier.height(Spacing.md))
-        ToggleLine("启用", enabled) { enabled = it }
-        ToggleLine("需要 @ 机器人才响应", requireAt) { requireAt = it }
+        ToggleLine(Txt.GROUP_TOGGLE_ENABLED, enabled) { enabled = it }
+        ToggleLine(Txt.GROUP_TOGGLE_REQUIRE_AT, requireAt) { requireAt = it }
 
         if (error != null) {
             Spacer(Modifier.height(Spacing.sm))
-            Text(text = error!!, color = TextMid, fontSize = FontSize.caption)
+            Text(text = error!!, color = c.textMid, fontSize = FontSize.caption)
         }
 
         Spacer(Modifier.height(Spacing.lg))
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(Spacing.sm)) {
             SecondaryButton(
-                text = "取消",
+                text = Txt.CANCEL,
                 modifier = Modifier.weight(1f),
                 onClick = onDismiss
             )
             PrimaryButton(
-                text = "保存",
+                text = Txt.SAVE,
                 modifier = Modifier.weight(1f),
                 loading = saving,
                 enabled = !saving,
@@ -359,6 +359,7 @@ private fun GroupEditorDialog(
 
 @Composable
 private fun ToggleLine(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val c = botColors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -366,10 +367,10 @@ private fun ToggleLine(label: String, checked: Boolean, onChange: (Boolean) -> U
             .padding(vertical = Spacing.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = TextHigh, fontSize = FontSize.body)
+        Text(text = label, color = c.textHigh, fontSize = FontSize.body)
         Spacer(Modifier.weight(1f))
         StatusBadge(
-            text = if (checked) "开" else "关",
+            text = if (checked) Txt.ENABLED else Txt.DISABLED,
             tone = if (checked) StatusTone.Success else StatusTone.Neutral
         )
     }

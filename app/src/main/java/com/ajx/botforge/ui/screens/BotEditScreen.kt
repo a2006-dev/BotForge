@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.screens
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,16 +39,11 @@ import com.ajx.botforge.ui.components.StatusTone
 import com.ajx.botforge.ui.components.TextButton
 import com.ajx.botforge.ui.components.FormField
 import com.ajx.botforge.ui.data.BotForgeRepository
-import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Bg2
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 import kotlinx.coroutines.launch
 
 /**
@@ -62,6 +59,7 @@ fun BotEditScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit
 ) {
+    val c = botColors
     val repo = remember { BotForgeRepository() }
     val scope = rememberCoroutineScope()
 
@@ -146,10 +144,10 @@ fun BotEditScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Bg1)
+            .background(c.bg1)
     ) {
         PageTopBar(
-            title = if (isNew) "添加机器人" else "编辑机器人",
+            title = if (isNew) Txt.DASH_EMPTY_BOT_ACTION else "编辑机器人",
             subtitle = if (isNew) null else name,
             onBack = onBack
         )
@@ -176,16 +174,16 @@ fun BotEditScreen(
             )
             Spacer(Modifier.height(Spacing.md))
             FormField(
-                label = "AppID",
+                label = Txt.FIELD_APPID_LABEL,
                 value = appId,
                 onValueChange = { appId = it.filter { c -> c.isDigit() } },
                 placeholder = "QQ 开放平台分配的 AppID",
                 keyboardType = KeyboardType.Number,
-                helper = "纯数字，可在 QQ 开放平台机器人资料页查看"
+                helper = Txt.FIELD_APPID_HELP
             )
             Spacer(Modifier.height(Spacing.md))
             PasswordField(
-                label = "AppSecret",
+                label = Txt.FIELD_APPSECRET_LABEL,
                 value = appSecret,
                 onValueChange = { appSecret = it },
                 placeholder = "留空表示不修改",
@@ -216,8 +214,8 @@ fun BotEditScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Bg2, RoundedCornerShape(Radius.md))
-                    .border(Sizes.hairline, Line, RoundedCornerShape(Radius.md))
+                    .background(c.bg2, RoundedCornerShape(Radius.md))
+                    .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.md))
                     .clickable { enabled = !enabled }
                     .padding(horizontal = Spacing.md, vertical = Spacing.md),
                 verticalAlignment = Alignment.CenterVertically
@@ -225,18 +223,18 @@ fun BotEditScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "启用此机器人",
-                        color = TextHigh,
+                        color = c.textHigh,
                         fontSize = FontSize.body,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = if (enabled) "服务启动后会尝试连接" else "服务会跳过此机器人",
-                        color = TextLow,
+                        text = if (enabled) Txt.BOT_ENABLED_DESC else Txt.BOT_DISABLED_DESC,
+                        color = c.textLow,
                         fontSize = FontSize.caption
                     )
                 }
                 StatusBadge(
-                    text = if (enabled) "已启用" else "已停用",
+                    text = if (enabled) Txt.ENABLED else Txt.DISABLED,
                     tone = if (enabled) StatusTone.Success else StatusTone.Neutral
                 )
             }
@@ -247,23 +245,21 @@ fun BotEditScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Bg2, RoundedCornerShape(Radius.md))
-                    .border(Sizes.hairline, Line, RoundedCornerShape(Radius.md))
+                    .background(c.bg2, RoundedCornerShape(Radius.md))
+                    .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.md))
                     .padding(horizontal = Spacing.md, vertical = Spacing.sm)
             ) {
                 InfoRow(label = "intents", value = intents.toString(), mono = true)
                 Text(
-                    text = "固定为 GROUP_AND_C2C_EVENT(1<<25)。" +
-                            "旧版本曾写入 1174409216，其中含 3 个无权限位，" +
-                            "会导致网关在 Identify 后立即断开，因此不再开放手填。",
-                    color = TextMid,
+                    text = Txt.BOT_INTENTS_DESC,
+                    color = c.textMid,
                     fontSize = FontSize.caption
                 )
             }
 
             Spacer(Modifier.height(Spacing.xl))
             PrimaryButton(
-                text = if (isNew) "创建机器人" else "保存修改",
+                text = if (isNew) Txt.BOT_CREATE else Txt.SAVE,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = canSave,
                 loading = saving,
@@ -271,9 +267,9 @@ fun BotEditScreen(
             )
             Spacer(Modifier.height(Spacing.sm))
             TextButton(
-                text = "取消",
+                text = Txt.CANCEL,
                 modifier = Modifier.fillMaxWidth(),
-                color = TextMid,
+                color = c.textMid,
                 onClick = onBack
             )
             Spacer(Modifier.height(Spacing.xl))
@@ -316,22 +312,23 @@ private fun PickRow(
     empty: Boolean,
     onClick: () -> Unit
 ) {
+    val c = botColors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.md))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.md))
+            .background(c.bg2, RoundedCornerShape(Radius.md))
+            .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.md))
             .clickable(onClick = onClick)
             .padding(horizontal = Spacing.md, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = TextMid, fontSize = FontSize.body)
+        Text(text = label, color = c.textMid, fontSize = FontSize.body)
         Spacer(Modifier.weight(1f))
         Text(
             text = value,
-            color = if (empty) TextLow else TextHigh,
+            color = if (empty) c.textLow else c.textHigh,
             fontSize = FontSize.body
         )
-        Text(text = "  ›", color = TextLow, fontSize = FontSize.body)
+        Text(text = "  ›", color = c.textLow, fontSize = FontSize.body)
     }
 }

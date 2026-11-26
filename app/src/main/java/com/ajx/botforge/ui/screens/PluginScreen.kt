@@ -29,16 +29,12 @@ import com.ajx.botforge.ui.components.EmptyState
 import com.ajx.botforge.ui.components.PageTopBar
 import com.ajx.botforge.ui.components.StatusBadge
 import com.ajx.botforge.ui.components.StatusTone
-import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Bg2
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
+import com.ajx.botforge.ui.text.Txt
 
 /**
  * 插件页（只读）
@@ -49,6 +45,7 @@ import com.ajx.botforge.ui.theme.TextMid
  */
 @Composable
 fun PluginScreen(onBack: () -> Unit) {
+    val c = botColors
     var plugins by remember { mutableStateOf<List<PluginManifest>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
 
@@ -61,20 +58,17 @@ fun PluginScreen(onBack: () -> Unit) {
         loaded = true
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Bg1)) {
+    Column(modifier = Modifier.fillMaxSize().background(c.bg1)) {
         PageTopBar(
-            title = "插件",
-            subtitle = if (loaded) "${plugins.size} 个已加载" else null,
+            title = Txt.TITLE_PLUGINS,
+            subtitle = if (loaded) String.format(Txt.PLUGIN_LOADED_FMT, plugins.size) else null,
             onBack = onBack
         )
 
         if (loaded && plugins.isEmpty()) {
             EmptyState(
-                title = "没有找到插件",
-                description = "把插件文件夹放到外部存储的 " +
-                        "Android/data/com.ajx.botforge/files/plugins/ 下，\n" +
-                        "每个插件目录内需要一份 plugin.json。\n" +
-                        "首次启动会自动生成 hello 示例。",
+                title = Txt.PLUGIN_EMPTY_TITLE,
+                description = Txt.PLUGIN_EMPTY_DESC,
                 icon = "⚙",
                 modifier = Modifier.weight(1f)
             )
@@ -97,30 +91,31 @@ fun PluginScreen(onBack: () -> Unit) {
 
 @Composable
 private fun PluginCard(p: PluginManifest) {
+    val c = botColors
     val compatible = p.api == PluginManifest.CURRENT_API
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.md))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.md))
+            .background(c.bg2, RoundedCornerShape(Radius.md))
+            .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.md))
             .padding(Spacing.md)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = p.name,
-                    color = TextHigh,
+                    color = c.textHigh,
                     fontSize = FontSize.body,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = p.id,
-                    color = TextLow,
+                    color = c.textLow,
                     fontSize = FontSize.caption
                 )
             }
             StatusBadge(
-                text = if (compatible) "v${p.version}" else "API 不兼容",
+                text = if (compatible) "v${p.version}" else Txt.PLUGIN_API_INCOMPATIBLE,
                 tone = if (compatible) StatusTone.Success else StatusTone.Warning
             )
         }
@@ -129,29 +124,29 @@ private fun PluginCard(p: PluginManifest) {
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 text = p.description,
-                color = TextMid,
+                color = c.textMid,
                 fontSize = FontSize.caption
             )
         }
 
         Spacer(Modifier.height(Spacing.sm))
         Row {
-            Text(text = "API ", color = TextLow, fontSize = FontSize.caption)
+            Text(text = "API ", color = c.textLow, fontSize = FontSize.caption)
             Text(
                 text = p.api.toString(),
-                color = if (compatible) TextMid else TextHigh,
+                color = if (compatible) c.textMid else c.textHigh,
                 fontSize = FontSize.caption
             )
             if (p.author.isNotBlank()) {
-                Text(text = "   作者 ", color = TextLow, fontSize = FontSize.caption)
-                Text(text = p.author, color = TextMid, fontSize = FontSize.caption)
+                Text(text = "   " + Txt.PLUGIN_AUTHOR + " ", color = c.textLow, fontSize = FontSize.caption)
+                Text(text = p.author, color = c.textMid, fontSize = FontSize.caption)
             }
         }
 
         Spacer(Modifier.height(Spacing.sm))
         Text(
-            text = "指令 ${p.commands.size} 条",
-            color = TextLow,
+            text = String.format(Txt.PLUGIN_CMD_FMT, p.commands.size),
+            color = c.textLow,
             fontSize = FontSize.caption
         )
         Spacer(Modifier.height(Spacing.xxs))
@@ -159,16 +154,16 @@ private fun PluginCard(p: PluginManifest) {
             Row(modifier = Modifier.padding(vertical = Spacing.xxs)) {
                 Text(
                     text = "/" + c.command,
-                    color = TextHigh,
+                    color = c.textHigh,
                     fontSize = FontSize.caption
                 )
                 Text(
                     text = "  " + c.description.ifBlank { c.usage },
-                    color = TextLow,
+                    color = c.textLow,
                     fontSize = FontSize.caption
                 )
                 if (c.scope.contains("group")) {
-                    Text(text = "  群", color = TextMid, fontSize = FontSize.caption)
+                    Text(text = "  群", color = c.textMid, fontSize = FontSize.caption)
                 }
             }
         }

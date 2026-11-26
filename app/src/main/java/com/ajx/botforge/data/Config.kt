@@ -349,6 +349,27 @@ object Config {
         get() = sp.getBoolean("log_enabled", true)
         set(v) = sp.edit().putBoolean("log_enabled", v).apply()
 
+    // ------------------------------------------------------------ 外观 / 引导
+    /**
+     * 主题模式键。取值 ThemeMode.name（SYSTEM / LIGHT / DARK）。
+     *
+     * 存字符串而不是 Int，是因为枚举顺序将来可能调整，
+     * 存序号会让用户设置错位；字符串对不上时 ThemeMode.fromKey 退回 SYSTEM。
+     */
+    var themeMode: String
+        get() = sp.getString("theme_mode", "SYSTEM") ?: "SYSTEM"
+        set(v) = sp.edit().putString("theme_mode", v).apply()
+
+    /**
+     * 首次引导是否已完成（看完或主动跳过都算完成）。
+     *
+     * 只在「没有任何机器人且从未启动过服务」时展示，
+     * 完成标记独立存储，避免用户删光机器人后又被引导一遍。
+     */
+    var onboarded: Boolean
+        get() = sp.getBoolean("onboarded", false)
+        set(v) = sp.edit().putBoolean("onboarded", v).apply()
+
     fun newId(prefix: String): String =
         prefix + "_" + System.currentTimeMillis().toString(36)
 }

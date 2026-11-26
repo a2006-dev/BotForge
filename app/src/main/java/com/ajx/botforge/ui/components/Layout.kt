@@ -1,5 +1,7 @@
 package com.ajx.botforge.ui.components
 
+import com.ajx.botforge.ui.text.Txt
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,20 +33,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.ajx.botforge.ui.theme.Bg1
-import com.ajx.botforge.ui.theme.Bg2
-import com.ajx.botforge.ui.theme.Bg3
-import com.ajx.botforge.ui.theme.Brand
-import com.ajx.botforge.ui.theme.Danger
 import com.ajx.botforge.ui.theme.FontSize
-import com.ajx.botforge.ui.theme.Line
-import com.ajx.botforge.ui.theme.LineStrong
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
-import com.ajx.botforge.ui.theme.TextLow
-import com.ajx.botforge.ui.theme.TextMid
+import com.ajx.botforge.ui.theme.botColors
 
 /**
  * 页面顶部栏。返回按钮仅在 showBack 为真时出现。
@@ -59,12 +52,13 @@ fun PageTopBar(
     onBack: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {}
 ) {
+    val c = botColors
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(Sizes.topBar)
-                .background(Bg1)
+                .background(c.bg1)
                 .padding(horizontal = Spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -78,7 +72,7 @@ fun PageTopBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "返回",
-                        tint = TextHigh,
+                        tint = c.textHigh,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -88,7 +82,7 @@ fun PageTopBar(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    color = TextHigh,
+                    color = c.textHigh,
                     fontSize = FontSize.title,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -97,7 +91,7 @@ fun PageTopBar(
                 if (subtitle != null && subtitle.isNotEmpty()) {
                     Text(
                         text = subtitle,
-                        color = TextLow,
+                        color = c.textLow,
                         fontSize = FontSize.caption,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -111,7 +105,7 @@ fun PageTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(Sizes.hairline)
-                .background(Line)
+                .background(c.line)
         )
     }
 }
@@ -128,6 +122,11 @@ fun ListRow(
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
+    // 统一列表行（《01-设计规范》§5）：56dp 最小高度、12dp 横向内边距、
+    // 标题 14sp/中等、副标题 12sp/次要色、尾部内容靠右。
+    // 所有列表页都必须走这个组件，不许各自 Row + Text 拼一遍，
+    // 否则间距漂移一点点，整页看起来就不齐。
+    val c = botColors
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -143,16 +142,17 @@ fun ListRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                color = TextHigh,
+                color = c.textHigh,
                 fontSize = FontSize.body,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             if (subtitle != null && subtitle.isNotEmpty()) {
+                Spacer(Modifier.height(Spacing.xxs))
                 Text(
                     text = subtitle,
-                    color = TextMid,
+                    color = c.textMid,
                     fontSize = FontSize.small,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -174,11 +174,12 @@ fun RowGroup(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val c = botColors
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(Bg2, RoundedCornerShape(Radius.lg))
-            .border(Sizes.hairline, Line, RoundedCornerShape(Radius.lg))
+            .background(c.bg2, RoundedCornerShape(Radius.lg))
+            .border(Sizes.hairline, c.line, RoundedCornerShape(Radius.lg))
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             content()
@@ -189,12 +190,13 @@ fun RowGroup(
 /** 行间分割线，用于 RowGroup 内部。 */
 @Composable
 fun RowDivider(modifier: Modifier = Modifier, indent: Dp = Spacing.md) {
+    val c = botColors
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(start = indent)
             .height(Sizes.hairline)
-            .background(Line)
+            .background(c.line)
     )
 }
 
@@ -207,6 +209,7 @@ fun EmptyState(
     icon: String = "○",
     action: (@Composable () -> Unit)? = null
 ) {
+    val c = botColors
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -216,20 +219,20 @@ fun EmptyState(
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(Bg3, CircleShape)
-                .border(Sizes.hairline, LineStrong, CircleShape),
+                .background(c.bg3, CircleShape)
+                .border(Sizes.hairline, c.lineStrong, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = icon,
-                color = TextLow,
+                color = c.textLow,
                 fontSize = FontSize.title
             )
         }
         Spacer(Modifier.height(Spacing.md))
         Text(
             text = title,
-            color = TextHigh,
+            color = c.textHigh,
             fontSize = FontSize.title,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center
@@ -238,7 +241,7 @@ fun EmptyState(
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 text = description,
-                color = TextLow,
+                color = c.textLow,
                 fontSize = FontSize.small,
                 textAlign = TextAlign.Center
             )
@@ -254,22 +257,23 @@ fun EmptyState(
 @Composable
 fun LoadingState(
     modifier: Modifier = Modifier,
-    message: String = "加载中"
+    message: String = Txt.LOADING
 ) {
+    val c = botColors
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(
-                color = Brand,
+                color = c.brand,
                 strokeWidth = 2.dp,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(Modifier.height(Spacing.md))
             Text(
                 text = message,
-                color = TextMid,
+                color = c.textMid,
                 fontSize = FontSize.small
             )
         }
@@ -283,6 +287,7 @@ fun ErrorState(
     modifier: Modifier = Modifier,
     onRetry: (() -> Unit)? = null
 ) {
+    val c = botColors
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -291,19 +296,19 @@ fun ErrorState(
     ) {
         Text(
             text = "⚠",
-            color = Danger,
+            color = c.danger,
             fontSize = FontSize.metric
         )
         Spacer(Modifier.height(Spacing.sm))
         Text(
             text = message,
-            color = TextMid,
+            color = c.textMid,
             fontSize = FontSize.small,
             textAlign = TextAlign.Center
         )
         if (onRetry != null) {
             Spacer(Modifier.height(Spacing.md))
-            SmallButton(text = "重试", onClick = onRetry)
+            SmallButton(text = Txt.RETRY, onClick = onRetry)
         }
     }
 }
@@ -314,9 +319,10 @@ fun InfoRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    valueColor: androidx.compose.ui.graphics.Color = TextHigh,
+    valueColor: androidx.compose.ui.graphics.Color = c.textHigh,
     mono: Boolean = false
 ) {
+    val c = botColors
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -325,7 +331,7 @@ fun InfoRow(
     ) {
         Text(
             text = label,
-            color = TextMid,
+            color = c.textMid,
             fontSize = FontSize.small,
             modifier = Modifier.width(96.dp)
         )
@@ -347,10 +353,11 @@ fun ScreenColumn(
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(Spacing.md),
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val c = botColors
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Bg1)
+            .background(c.bg1)
             .padding(horizontal = Spacing.md, vertical = Spacing.md),
         verticalArrangement = verticalArrangement,
         content = content

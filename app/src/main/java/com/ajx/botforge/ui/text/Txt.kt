@@ -1,0 +1,474 @@
+package com.ajx.botforge.ui.text
+
+/**
+ * 全站界面文案。
+ *
+ * ## 为什么集中管理
+ *
+ * 1. 文案散落在 20 个文件里时，改一次措辞要全项目搜，必然漏；
+ * 2. 集中后可以一次性校验用词一致性（同一概念不能有三种说法）；
+ * 3. 将来做多语言只需换一个实现，页面代码不动。
+ *
+ * ## 写作规范（强制）
+ *
+ * 界面文案一律为**系统描述式**，不使用以下成分：
+ *  - 语气词：啦、哦、呢、吧、呀、啊
+ *  - 感叹号：！
+ *  - 表情符号：✅ ❌ ⛔ 🎉 等
+ *  - 劝诱表述："快来"、"试试看"、"你一定会"
+ *  - 拟人表述："我"、"你"（除非确指用户操作）、"主人"在非权限语境下
+ *  - 主观评价："很棒"、"非常简单"、"最强大"
+ *
+ * 统一采用：
+ *  - 陈述句，主语为系统或对象本身（例："服务未运行"而非"服务没跑起来哦"）
+ *  - 操作指引用动宾结构（例："点击生成验证码"）
+ *  - 状态用「对象 + 状态」二元结构（例："机器人 3 个在线"）
+ *  - 数量与单位之间留空格（例："3 个"、"2 分钟前"）
+ *  - 冒号统一全角「：」，括号统一全角「（）」
+ */
+object Txt {
+
+    // ---------------------------------------------------------------- 通用
+    const val OK = "确定"
+    const val CANCEL = "取消"
+    const val SAVE = "保存"
+    const val DELETE = "删除"
+    const val EDIT = "编辑"
+    const val ADD = "添加"
+    const val CLOSE = "关闭"
+    const val RETRY = "重试"
+    const val REFRESH = "刷新"
+    const val MORE = "更多"
+    const val NONE = "无"
+    const val UNKNOWN = "未知"
+    const val ENABLED = "已启用"
+    const val DISABLED = "已停用"
+    const val LOADING = "加载中"
+    const val EMPTY = "暂无数据"
+
+    // ---------------------------------------------------------------- 顶栏标题
+    const val TITLE_DASHBOARD = "BotForge"
+    const val TITLE_BOTS = "机器人"
+    const val TITLE_CAPABILITIES = "能力中心"
+    const val TITLE_LOGS = "日志"
+    const val TITLE_SETTINGS = "设置"
+    const val TITLE_PERSONAS = "人设"
+    const val TITLE_MODELS = "模型"
+    const val TITLE_PLUGINS = "插件"
+    const val TITLE_GROUPS = "群管理"
+    const val TITLE_PERMISSIONS = "权限中心"
+    const val TITLE_TOOLS = "工具集"
+    const val TITLE_TERMINAL = "终端"
+    const val TITLE_AUDIT = "审计日志"
+    const val TITLE_MEMORY = "记忆管理"
+    const val TITLE_TESTCHAT = "模型测试"
+    const val TITLE_ABOUT = "关于"
+
+    // ---------------------------------------------------------------- 首页
+    const val DASH_SUBTITLE = "服务状态与配置概览"
+    const val DASH_SERVICE_STOPPED = "服务未运行"
+    const val DASH_SERVICE_STOPPED_HINT = "点击下方按钮启动服务"
+    const val DASH_NO_BOT = "服务运行中，未配置机器人"
+    const val DASH_CONNECTING = "%d 个机器人连接中"
+    const val DASH_ALL_ONLINE = "%d 个机器人在线"
+    const val DASH_PARTIAL = "%d/%d 在线，%d 个未连接"
+    const val DASH_METRIC_UPTIME = "运行时长"
+    const val DASH_METRIC_LAST_EVENT = "最近事件"
+    const val DASH_METRIC_RECONNECT = "重连次数"
+    const val DASH_ACTION_START = "启动服务"
+    const val DASH_ACTION_STOP = "停止服务"
+    const val DASH_SECTION_BOTS = "机器人"
+    const val DASH_SECTION_EVENTS = "最近事件"
+    const val DASH_SECTION_MORE = "功能入口"
+    const val DASH_NO_EVENT = "无事件记录。服务运行后此处显示最新日志。"
+    const val DASH_EMPTY_BOT_TITLE = "未配置机器人"
+    const val DASH_EMPTY_BOT_DESC = "需在 QQ 开放平台创建应用并获取 AppID 与 AppSecret"
+    const val DASH_EMPTY_BOT_ACTION = "添加机器人"
+    const val DASH_EMPTY_BOT_PERM = "检查权限"
+
+    // ---------------------------------------------------------------- 首次引导
+    const val ONBOARD_TITLE = "初始配置"
+    const val ONBOARD_DESC = "本应用通过 QQ 官方开放接口收发消息，并调用用户自行配置的模型接口生成回复。完成以下三项配置后服务可用。"
+    const val ONBOARD_STEP1_TITLE = "配置机器人"
+    const val ONBOARD_STEP1_DESC = "在 QQ 开放平台创建机器人应用，获取 AppID 与 AppSecret 后填入。"
+    const val ONBOARD_STEP1_ACTION = "配置机器人"
+    const val ONBOARD_STEP2_TITLE = "配置模型"
+    const val ONBOARD_STEP2_DESC = "填写 OpenAI 兼容接口地址与密钥。未配置模型时仅内置指令可用，无法生成回复。"
+    const val ONBOARD_STEP2_ACTION = "配置模型"
+    const val ONBOARD_STEP3_TITLE = "授予运行权限"
+    const val ONBOARD_STEP3_DESC = "通知权限、电池优化白名单、后台运行权限。缺失任一项会导致服务被系统终止。"
+    const val ONBOARD_STEP3_ACTION = "检查权限"
+    const val ONBOARD_SKIP = "跳过，进入首页"
+
+    // ---------------------------------------------------------------- 授权
+    const val AUTH_OWNER_BOUND = "主人已绑定"
+    const val AUTH_OWNER_NONE = "未绑定主人"
+    const val AUTH_OWNER_NONE_HINT = "点击生成验证码完成绑定"
+    const val AUTH_OWNER_SUMMARY = "%s · 管理员 %d 人"
+    const val AUTH_ROLE_OWNER = "主人"
+    const val AUTH_ROLE_ADMIN = "管理员"
+    const val AUTH_ROLE_USER = "普通用户"
+    const val AUTH_SCOPE_GLOBAL = "全局"
+    const val AUTH_SCOPE_GROUP = "限群"
+
+    // ---------------------------------------------------------------- 机器人
+    const val BOT_STATE_ONLINE = "在线"
+    const val BOT_STATE_CONNECTING = "连接中"
+    const val BOT_STATE_RECONNECTING = "重连中"
+    const val BOT_STATE_STOPPED = "已停止"
+    const val BOT_STATE_ERROR = "异常"
+    const val BOT_LABEL_HEARTBEAT = "心跳"
+    const val BOT_LABEL_UPTIME = "在线"
+    const val BOT_LABEL_RECONNECT = "重连"
+
+    // ---------------------------------------------------------------- 功能入口
+    const val LINK_PERSONA = "人设"
+    const val LINK_PERSONA_DESC = "提示词、称呼、记忆深度、生成参数"
+    const val LINK_MODEL = "模型"
+    const val LINK_MODEL_DESC = "接口地址、密钥、连通性测试"
+    const val LINK_PLUGIN = "插件"
+    const val LINK_PLUGIN_DESC = "导入导出、指令白名单"
+    const val LINK_CAPABILITY = "能力中心"
+    const val LINK_CAPABILITY_DESC = "联网搜索、工具调用、记忆"
+    const val LINK_TOOLS = "工具集"
+    const val LINK_TOOLS_DESC = "本地工具包与命令行环境"
+    const val LINK_TERMINAL = "终端"
+    const val LINK_TERMINAL_DESC = "内置 Linux 环境"
+    const val LINK_PERMISSION = "权限中心"
+    const val LINK_PERMISSION_DESC = "系统权限、主人绑定、管理员"
+    const val LINK_SETTINGS = "设置"
+    const val LINK_SETTINGS_DESC = "主题、保活、日志、关于"
+
+    // ---------------------------------------------------------------- 提示
+    const val HINT_REQUIRED = "必填"
+    const val HINT_OPTIONAL = "选填"
+    const val HINT_NO_PERMISSION = "当前账号无此权限"
+    const val HINT_NEED_OWNER = "需要主人权限"
+    const val HINT_FEATURE_UNAVAILABLE = "功能未启用"
+    const val HINT_COPY_SUCCESS = "已复制到剪贴板"
+    const val HINT_SAVE_SUCCESS = "已保存"
+        const val HINT_DELETE_SUCCESS = "已删除"
+
+    // ---------------------------------------------------------------- 错误
+    const val ERR_GENERIC = "操作失败"
+    const val ERR_NETWORK = "网络请求失败"
+    const val ERR_EMPTY_INPUT = "输入不能为空"
+    const val ERR_INVALID_FORMAT = "格式不正确"
+    // ---------------------------------------------------------------- 关于页
+    const val ABOUT_TAGLINE = "QQ 开放平台机器人 · 本地运行实例"
+    const val ABOUT_VERSION_FMT = "版本 %s（%d）"
+    const val ABOUT_INTRO = "通过 QQ 官方开放接口收发消息，调用本机配置的模型接口生成回复。" +
+            "不依赖第三方协议实现，不读取用户 QQ 账号数据，配置与消息记录均保存在本机。"
+    const val ABOUT_PRIVACY_TITLE = "隐私与数据"
+    const val ABOUT_CRED_STORE = "凭据存储"
+    const val ABOUT_CRED_STORE_V = "AppSecret 与 API Key 加密后存于本机"
+    const val ABOUT_CHAT = "消息记录"
+    const val ABOUT_CHAT_V = "仅存本机数据库"
+    const val ABOUT_EGRESS = "网络出站"
+    const val ABOUT_EGRESS_V = "仅访问 QQ 开放平台接口与已配置的模型接口"
+    const val ABOUT_EXPORT = "数据导出"
+    const val ABOUT_EXPORT_V = "设置页可导出全部配置与日志"
+    const val ABOUT_LIMIT_TITLE = "安全边界"
+    const val ABOUT_LIMIT_BODY = "本机存储在未获得 root 权限的设备上受系统沙箱保护。" +
+            "已取得 root 权限的设备上，第三方程序可主动提取应用私有目录，本应用不对该情形提供防护。"
+    const val ABOUT_HELP_TITLE = "帮助与反馈"
+    const val ABOUT_HELP_OFFICIAL = "QQ 开放平台文档"
+    const val ABOUT_HELP_REPO = "代码仓库"
+    const val ABOUT_HELP_ISSUE = "问题反馈"
+    const val ABOUT_OSS_TITLE = "开源组件"
+    const val ABOUT_ENV_TITLE = "运行环境"
+    const val ABOUT_ENV_MODEL = "设备型号"
+    const val ABOUT_ENV_ANDROID = "系统版本"
+    const val ABOUT_ENV_ABI = "指令集"
+    const val ABOUT_LEGAL_TITLE = "法律声明"
+    const val ABOUT_LEGAL_BODY = "本应用为独立开发的开源软件，与腾讯公司无隶属关系，不代表 QQ 官方立场。" +
+            "接入 QQ 开放平台时须遵守《QQ 机器人运营规范》及所在地法律法规。" +
+            "因使用方式不当产生的账号风险由使用者自行承担。"
+    const val ABOUT_FOOTER = "Kotlin · Jetpack Compose"
+
+    // ---------------------------------------------------------------- 插件页
+    const val PLUGIN_LOADED_FMT = "%d 个已加载"
+    const val PLUGIN_EMPTY_TITLE = "未发现插件"
+    const val PLUGIN_EMPTY_DESC = "插件目录：Android/data/com.ajx.botforge/files/plugins/\n" +
+            "每个插件为一个子目录，目录内需包含 plugin.json。\n" +
+            "首次启动时自动生成 hello 示例插件。"
+    const val PLUGIN_API_INCOMPATIBLE = "API 不兼容"
+    const val PLUGIN_AUTHOR = "作者"
+    const val PLUGIN_CMD_FMT = "指令 %d 条"
+
+    // ---------------------------------------------------------------- 列表 / 编辑页
+    const val LIST_EMPTY_PERSONA = "未配置人设"
+    const val LIST_EMPTY_MODEL = "未配置模型"
+    const val LIST_EMPTY_BOT = "未配置机器人"
+    const val LIST_EMPTY_GROUP = "未登记群"
+    const val LIST_COUNT_PERSONA_FMT = "%d 条"
+    const val LIST_COUNT_MODEL_FMT = "%d 个"
+    const val LIST_COUNT_GROUP_FMT = "%d 个群 · %d 个已启用"
+    const val LIST_BOT_SUMMARY_FMT = "共 %d 个 · %d 个已启用"
+    const val LIST_BOT_USED_FMT = "%d 个机器人引用"
+
+    // ---------------------------------------------------------------- 日志页
+    const val LOG_COUNT_FMT = "%d 条 · 上限 600"
+    const val LOG_EMPTY = "无日志记录"
+    const val LOG_ERROR_HINT_FMT = "存在 %d 条错误记录"
+
+    // ---------------------------------------------------------------- 确认对话框
+    const val CONFIRM_DELETE_PERSONA = "删除人设「%s」。此操作不可撤销。"
+    const val CONFIRM_DELETE_MODEL = "删除模型「%s」。此操作不可撤销。"
+    const val CONFIRM_DELETE_GROUP = "删除群「%s」。此操作不可撤销。"
+    const val CONFIRM_DELETE_BOT = "删除机器人「%s」及其 %d 条群配置。此操作不可撤销。"
+    const val CONFIRM_REF_PERSONA_FMT = "「%s」正被 %d 个机器人引用，删除后这些机器人将失去人设。"
+    const val CONFIRM_REF_MODEL_FMT = "「%s」正被 %d 个机器人引用，删除后这些机器人将无法调用模型。"
+
+    // ---------------------------------------------------------------- 表单字段说明
+    const val FIELD_APPID_HELP = "QQ 开放平台分配的 AppID，纯数字"
+    const val FIELD_APPSECRET_HELP = "QQ 开放平台分配的 AppSecret"
+    const val FIELD_BASEURL_HELP = "不含 /chat/completions，末尾斜杠自动去除"
+    const val FIELD_APIKEY_HELP = "请求头 Authorization 使用的密钥"
+    const val FIELD_MODEL_HELP = "请求体 model 字段的取值"
+    const val FIELD_PROMPT_HELP = "作为 system prompt 发送给模型"
+    const val FIELD_GROUPID_HELP = "群会话 openid，可在消息回调日志中获取"
+    const val FIELD_NOTE_HELP = "备注名，仅本机可见"
+    const val FIELD_TEMP_HELP = "取值 0 ~ 2，数值越大输出越发散"
+    const val FIELD_TOKENS_HELP = "单条回复的最大 token 数"
+    const val FIELD_TIMEOUT_HELP = "单次请求超时时间"
+    const val FIELD_COOLDOWN_HELP = "同一用户两次响应的最短间隔"
+
+    // ---------------------------------------------------------------- 状态提示
+    const val STATE_NEED_AT = "需 @ 机器人"
+    const val STATE_NO_AT = "免 @"
+    const val STATE_CONNECTING_FMT = "%d 个机器人连接中"
+    const val STATE_STOPPED_HAS_BOT_FMT = "已配置 %d 个机器人，服务未启动"
+    const val STATE_RECONNECT_WARN = "24 小时内重连 5 次，建议检查网络"
+    const val STATE_ISSUES_FMT = "%d 个问题待处理"
+    const val STATE_ABNORMAL_FMT = "%d 个机器人连接异常"
+    const val UNIT_TIMES = "次"
+    const val UNIT_ITEMS = "条"
+    const val UNIT_CHARS = "字"
+    // ---------------------------------------------------------------- 列表通用
+    const val NEW = "新建"
+    const val NOT_SET = "未配置"
+    const val NOT_BOUND = "未绑定"
+    const val IN_USE = "使用中"
+    const val UNUSED = "未使用"
+    const val ENABLE = "启用"
+    const val DISABLE = "禁用"
+    const val PAUSE = "暂停"
+    const val RESUME = "继续"
+    const val CLEAR = "清空"
+    const val SAVE_FAILED = "保存失败"
+    const val READ_FAILED = "读取失败"
+
+    // ---------------------------------------------------------------- 机器人列表
+    const val BOT_LIST_EMPTY_TITLE = "未配置机器人"
+    const val BOT_LIST_EMPTY_DESC = "添加 QQ 开放平台机器人应用，填写 AppID 与 AppSecret 后接入"
+    const val BOT_DELETE_TITLE = "删除机器人"
+    const val BOT_APPID_FMT = "AppID %s"
+    const val BOT_NO_GROUP = "未配置群"
+    const val BOT_MISSING_FMT = "缺少%s"
+    const val BOT_MANAGE_GROUP = "群管理"
+    const val LABEL_PERSONA = "人设"
+    const val LABEL_MODEL = "模型"
+
+    // ---------------------------------------------------------------- 人设
+    const val PERSONA_TITLE = "人设"
+    const val PERSONA_EMPTY_TITLE = "未配置人设"
+    const val PERSONA_EMPTY_DESC = "人设包含人格提示词、称呼、温度与记忆深度"
+    const val PERSONA_NEW = "新建人设"
+    const val PERSONA_DELETE_TITLE = "删除人设"
+    const val PERSONA_UNTITLED = "未命名人设"
+    const val PERSONA_SUMMARY_FMT = "称呼「%s」· 温度 %s · 上限 %d 字"
+    const val PERSONA_MEMORY_FMT = "记忆开启 · 保留 %d 条"
+    const val PERSONA_MEMORY_OFF = "记忆关闭"
+    const val PERSONA_REF_FMT = "%d 个机器人引用"
+
+    // ---------------------------------------------------------------- 模型
+    const val MODEL_TITLE = "模型"
+    const val MODEL_EMPTY_TITLE = "未配置模型"
+    const val MODEL_EMPTY_DESC = "支持本机反代、官方接口与本地模型，统一使用 OpenAI 兼容协议"
+    const val MODEL_NEW = "新建模型"
+    const val MODEL_DELETE_TITLE = "删除模型"
+    const val MODEL_SUMMARY_FMT = "协议 %s · 超时 %ds · 上限 %d 字"
+    const val MODEL_KEY_MISSING = "密钥未配置"
+    const val MODEL_KEY_SAVED = "密钥已保存"
+
+    // ---------------------------------------------------------------- 群配置
+    const val GROUP_TITLE = "群配置"
+    const val GROUP_EMPTY_TITLE = "未配置群"
+    const val GROUP_EMPTY_DESC = "配置群后，机器人在该群响应 @ 消息。\n群 openid 可从消息回调日志获取。"
+    const val GROUP_ADD = "添加群"
+    const val GROUP_EDIT = "编辑群"
+    const val GROUP_DELETE_TITLE = "删除群配置"
+    const val GROUP_UNTITLED = "未命名群"
+    const val GROUP_COOLDOWN_FMT = "冷却 %ds"
+    const val GROUP_OPENID_REQUIRED = "group_openid 为必填项"
+    const val GROUP_OPENID_LABEL = "group_openid"
+    const val GROUP_OPENID_PLACEHOLDER = "群会话 openid"
+    const val GROUP_NOTE_LABEL = "备注名"
+    const val GROUP_NOTE_PLACEHOLDER = "备注名称"
+    const val GROUP_COOLDOWN_LABEL = "冷却秒数"
+    const val GROUP_COOLDOWN_PLACEHOLDER = "单位 秒"
+    const val GROUP_TOGGLE_ENABLED = "启用"
+    const val GROUP_TOGGLE_REQUIRE_AT = "仅响应 @ 消息"
+
+    // ---------------------------------------------------------------- 日志
+    const val LOG_TITLE = "运行日志"
+    const val LOG_TAILING_ON = "暂停跟随"
+    const val LOG_TAILING_OFF = "继续跟随"
+    const val LOG_LEVEL_ALL = "全部"
+    const val LOG_LEVEL_INFO = "信息"
+    const val LOG_LEVEL_WARN = "警告"
+    const val LOG_LEVEL_ERROR = "错误"
+    const val LOG_EMPTY_DESC = "服务启动后，连接、消息处理与模型调用记录显示在此处"
+    const val LOG_CLEAR = "清空"
+    // ---------------------------------------------------------------- 补充：表单与机器人编辑
+    const val FIELD_APPID_LABEL = "AppID"
+    const val FIELD_APPSECRET_LABEL = "AppSecret"
+    const val BOT_ENABLED_DESC = "服务启动时建立连接"
+    const val BOT_DISABLED_DESC = "服务跳过此机器人"
+    const val BOT_INTENTS_DESC = "固定为 GROUP_AND_C2C_EVENT（1<<25）。" +
+            "旧版本写入 1174409216，含 3 个无权限位，" +
+            "会导致网关在 Identify 后立即断开，因此该项不开放手工填写。"
+    const val BOT_CREATE = "创建机器人"
+    const val BOT_SAVE = "保存修改"
+    // ---------------------------------------------------------------- 补充：编辑页 / 设置页
+    const val ON = "开"
+    const val OFF = "关"
+    const val MODEL_ADD = "添加模型"
+    const val MODEL_EDIT = "编辑模型"
+    const val MODEL_NAME_PLACEHOLDER = "模型名称"
+    const val MODEL_BASEURL_LABEL = "Base URL"
+    const val MODEL_APIKEY_LABEL = "API Key"
+    const val MODEL_KEY_KEEP = "已保存，留空不修改"
+    const val PERSONA_EDIT = "编辑人设"
+    const val PERSONA_CREATE = "创建人设"
+    const val PERSONA_PROMPT_LABEL = "人格描述（Prompt）"
+    const val SET_SEARCH_MODEL = "由模型判定"
+    const val SET_SEARCH_KEYWORD = "关键词匹配"
+    const val SET_SHIZUKU = "Shizuku 增强"
+    // ---------------------------------------------------------------- 补充：状态与无障碍
+    const val BOT_PAUSED_DESC = "已手动停止，不参与自动拉起"
+    const val BOT_OFFLINE_DESC = "服务未运行，机器人不响应消息"
+    const val ISSUE_NO_NOTIFY = "通知权限未授予，后台运行受限"
+    const val CD_HIDE = "隐藏"
+    const val CD_SHOW = "显示"
+    const val CHAR_COUNT_FMT = "%d 字"
+    // ---------------------------------------------------------------- 补充：机器人状态说明
+    const val BOT_STATE_PAUSED = "已暂停"
+    const val BOT_STATE_OFFLINE = "离线"
+    const val BOT_HINT_ONLINE = "服务运行中，机器人正常响应"
+    const val BOT_HINT_CONNECTING = "正在建立网关连接"
+    const val BOT_HINT_RECONNECTING = "连接中断，正在自动重连"
+    const val BOT_HINT_ERROR = "连接异常，需要处理"
+
+    // ==================== 终端 ====================
+
+    /** 终端页标题 */
+    const val TITLE_TERMINAL = "终端"
+
+    /** 终端副标题：会话运行中 */
+    const val TERM_SUB_RUNNING = "会话运行中"
+
+    /** 终端副标题：会话未启动 */
+    const val TERM_SUB_IDLE = "会话未启动"
+
+    /** 解包进度标题 */
+    const val TERM_UNPACKING = "正在解包运行环境"
+
+    /** 解包失败 */
+    const val TERM_UNPACK_FAILED = "运行环境解包失败"
+
+    /** 缺少可执行文件 */
+    const val TERM_NO_BINARY = "缺少运行环境组件"
+
+    /** 缺少可执行文件说明 */
+    const val TERM_NO_BINARY_DESC = "当前安装包未包含 proot 组件，可能由不支持的架构或裁剪版本安装。请安装官方 arm64 完整包。"
+
+    /** 终端空态 */
+    const val TERM_EMPTY = "点击下方启动按钮开启会话"
+
+    /** 会话启动失败 */
+    const val TERM_START_FAILED = "会话启动失败"
+
+    /** 启动按钮 */
+    const val TERM_START = "启动会话"
+
+    /** 重启按钮 */
+    const val TERM_RESTART = "重启会话"
+
+    /** 清屏按钮 */
+    const val TERM_CLEAR = "清屏"
+
+    /** 发送按钮 */
+    const val TERM_SEND = "发送"
+
+    /** 输入提示 */
+    const val TERM_INPUT_HINT = "输入命令"
+
+    // ==================== 工具包 ====================
+
+    /** 工具页标题 */
+    const val TITLE_TOOLS = "工具包"
+
+    /** 工具页副标题，参数为工具数量 */
+    fun TOOL_SUB(count: Int): String = "已安装 $count 个"
+
+    /** 刷新按钮 */
+    const val TOOL_REFRESH = "刷新"
+
+    /** 说明区标题 */
+    const val TOOL_INTRO_TITLE = "工具包机制"
+
+    /** 说明区正文 */
+    const val TOOL_INTRO_DESC = "工具包由一份清单与一个入口脚本组成，在应用内置的 Linux 环境中执行。界面按清单自动生成参数表单，参数以环境变量传入脚本，标准输出作为结果显示。"
+
+    /** 安全边界声明 */
+    const val TOOL_SECURITY_NOTE = "工具包脚本以应用自身权限运行，可读写共享存储与应用私有目录。应用不提供沙箱隔离，启用前请确认来源可信。"
+
+    /** 目录说明 */
+    const val TOOL_DIR_NOTE = "工具包目录：Android/data/com.ajx.botforge/files/plugins"
+
+    /** 空态标题 */
+    const val TOOL_EMPTY_TITLE = "尚无工具包"
+
+    /** 空态说明 */
+    const val TOOL_EMPTY_DESC = "将工具包目录放入上述路径后点击刷新"
+
+    /** 高风险标记 */
+    const val TOOL_RISKY = "高风险"
+
+    /** 未标注作者 */
+    const val TOOL_UNKNOWN = "未标注"
+
+    /** 工具元信息，参数为版本、作者、超时秒数 */
+    fun TOOL_META(version: String, author: String, timeout: Int): String =
+        "v$version · $author · 超时 ${timeout}s"
+
+    /** 执行按钮 */
+    const val TOOL_RUN = "执行"
+
+    /** 执行中按钮 */
+    const val TOOL_RUNNING = "执行中"
+
+    /** 清空结果按钮 */
+    const val TOOL_CLEAR_RESULT = "清空结果"
+
+    /** 无输出 */
+    const val TOOL_NO_OUTPUT = "无输出"
+
+    /** 结果元信息，参数为退出码与耗时毫秒 */
+    fun TOOL_RESULT_META(exitCode: Int, durationMs: Long): String =
+        "退出码 $exitCode · ${durationMs}ms"
+
+    /** 首页快捷入口：终端 */
+    const val LINK_TERMINAL = "终端"
+
+    /** 首页快捷入口：终端说明 */
+    const val LINK_TERMINAL_DESC = "内置 Linux 环境与命令行"
+
+    /** 首页快捷入口：工具包 */
+    const val LINK_TOOLS = "工具包"
+
+    /** 首页快捷入口：工具包说明 */
+    const val LINK_TOOLS_DESC = "脚本化的小工具，带参数表单"
+}

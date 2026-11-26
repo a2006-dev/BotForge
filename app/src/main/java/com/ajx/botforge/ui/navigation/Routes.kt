@@ -18,6 +18,10 @@ object Routes {
     const val PLUGINS = "plugins"
     const val PLUGIN_DETAIL = "plugins/detail"
     const val ABOUT = "about"
+    /** 内置 Linux 终端。 */
+    const val TERMINAL = "terminal"
+    /** 工具包管理。 */
+    const val TOOLS = "tools"
 
     /** 带机器人 id 的编辑页路由，id 为空表示新建。 */
     fun botEdit(id: String? = null): String =

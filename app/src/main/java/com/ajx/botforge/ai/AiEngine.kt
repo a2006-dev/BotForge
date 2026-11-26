@@ -8,7 +8,6 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.TimeUnit
 
 /**
  * 模型调用层：统一 OpenAI 兼容 /anthropic 两种协议
