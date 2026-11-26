@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.BotForge" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#111827</item>
+        <item name="colorPrimaryDark">#0B1220</item>
+        <item name="colorAccent">#4F7CFF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <color name="bg">#FFFFFF</color>
+    <color name="card">#F7F8FA</color>
+    <color name="accent">#111827</color>
+    <color name="text_main">#111111</color>
+    <color name="text_sub">#888888</color>
+    <color name="ok">#16A34A</color>
+    <color name="warn">#D97706</color>
+    <color name="err">#DC2626</color>
+</resources>
