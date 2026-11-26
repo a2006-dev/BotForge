@@ -2,10 +2,17 @@ package com.ajx.botforge.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
@@ -99,7 +106,28 @@ fun BotForgeTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = BotForgeTypography,
-        shapes = BotForgeShapes,
-        content = content
-    )
+        shapes = BotForgeShapes
+    ) {
+        // 全站统一处理系统栏 insets。
+        //
+        // 上面的 setDecorFitsSystemWindows(window, false) 让内容可以延伸到
+        // 状态栏/导航栏下方，但「延伸」必须由内容自己避让，否则大标题会被
+        // 状态栏压住、列表底部会被手势条盖住。
+        //
+        // 这里在最外层统一吃掉 statusBars + navigationBars，
+        // 各页面就不必各自 rememberWindowInsets 一遍——
+        // 页面内部只关心自己的业务布局。
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Bg0
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.systemBars)
+            ) {
+                content()
+            }
+        }
+    }
 }

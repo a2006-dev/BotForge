@@ -138,7 +138,23 @@ class BotForgeRepository {
 
     fun serviceStatus(): String = BotManager.status()
 
+    /** 已加载的客户端数（配置层面），不是在线数 */
     fun runningCount(): Int = BotManager.count()
+
+    /** 真正在线（WebSocket 处于 CONNECTED）的数量 */
+    fun onlineCount(): Int = BotManager.onlineCount()
+
+    /** 聚合状态，Dashboard 用真实数字渲染 */
+    fun summary(): BotManager.Summary = BotManager.summary()
+
+    /** 每个机器人的连接快照 */
+    fun connStates(): List<com.ajx.botforge.qq.BotConnectionState> = BotManager.states()
+
+    /** 订阅连接状态变化（返回反订阅函数） */
+    fun observeConnState(cb: (com.ajx.botforge.qq.BotConnectionState) -> Unit): () -> Unit {
+        com.ajx.botforge.qq.BotStatusRegistry.listener = cb
+        return { com.ajx.botforge.qq.BotStatusRegistry.listener = null }
+    }
 
     suspend fun reloadBots(context: Context): Unit = withContext(Dispatchers.IO) {
         BotManager.reload(context.applicationContext)
