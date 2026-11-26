@@ -239,7 +239,8 @@ fun RiskConfirmSheet(
     onDismiss: () -> Unit
 ) {
     val c = botColors
-    var typed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    val typedState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+    val typed = typedState.value
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.bg2,
@@ -254,7 +255,7 @@ fun RiskConfirmSheet(
                 RiskConfirmBody(
                     spec = spec,
                     typed = typed,
-                    onTypedChange = { typed = it }
+                    onTypedChange = { typedState.value = it }
                 )
             }
         },
@@ -303,7 +304,7 @@ private fun Modifier.androidClickableIf(
     enabled: Boolean,
     onClick: () -> Unit
 ): Modifier = if (enabled) {
-    this.then(androidx.compose.foundation.clickable(onClick = onClick))
+    this.then(androidx.compose.foundation.clickable(enabled = true, onClick = onClick))
 } else {
     this
 }

@@ -89,6 +89,7 @@ fun DashboardScreen(
     onOpenTerminal: () -> Unit,
     onOpenTools: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenPermissions: () -> Unit,
     onToggleService: () -> Unit,
     onRequestPermissions: () -> Unit
 ) {
@@ -683,10 +684,10 @@ private fun summaryLine(state: com.ajx.botforge.ui.data.DashboardState): String 
     val s = state.summary
     return when {
         !state.serviceRunning -> "服务未运行，点下方按钮启动"
-        s.total == 0 -> "服务在跑，但还没添加机器人"
-        s.online == 0 -> "${s.total} 个机器人，正在连接"
-        s.online == s.total -> "${s.online} 个机器人在线"
-        else -> "${s.online}/${s.total} 在线，${s.total - s.online} 个未连接"
+        s.loaded == 0 -> "服务在跑，但还没添加机器人"
+        s.online == 0 -> "${s.loaded} 个机器人，正在连接"
+        s.online == s.loaded -> "${s.online} 个机器人在线"
+        else -> "${s.online}/${s.loaded} 在线，${s.loaded - s.online} 个未连接"
     }
 }
 

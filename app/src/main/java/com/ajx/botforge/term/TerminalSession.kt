@@ -61,8 +61,10 @@ class TerminalSession(
     fun start(command: String?): Boolean {
         if (!TerminalEnvironment.isReady(context)) return false
         return try {
-            // Oreo 起 Os.openpty() 返回 FileDescriptor[2]：下标 0 为主端，1 为从端。
-            val pty = Os.openpty()
+            // Os.openpty() 在 SDK 的 android.jar 里是 @hide，编译期不可见，
+            // 因此走反射。它在运行时始终存在（API 21+），方法签名
+            // 为 public static FileDescriptor[] openpty()。
+            val pty = invokeOpenpty()
             val masterFdObj = pty[0]
             val slave = pty[1]
             master = masterFdObj
@@ -95,6 +97,21 @@ class TerminalSession(
             close()
             false
         }
+    }
+
+    /**
+     * 反射调用 `android.system.Os.openpty()`。
+     *
+     * 该方法在 AOSP 中带 `@UnsupportedAppUsage` 且未进入 SDK 存根，
+     * 直接引用编译不通过；运行时可正常访问。
+     *
+     * @return 长度为 2 的数组，[0] 为主端，[1] 为从端
+     */
+    private fun invokeOpenpty(): Array<FileDescriptor> {
+        val m = Class.forName("android.system.Os")
+            .getMethod("openpty")
+        @Suppress("UNCHECKED_CAST")
+        return m.invoke(null) as Array<FileDescriptor>
     }
 
     /** 读线程：poll 等可读，read 取数据，EOF 结束。 */

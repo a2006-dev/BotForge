@@ -363,9 +363,6 @@ object Txt {
 
     // ==================== 终端 ====================
 
-    /** 终端页标题 */
-    const val TITLE_TERMINAL = "终端"
-
     /** 终端副标题：会话运行中 */
     const val TERM_SUB_RUNNING = "会话运行中"
 
@@ -406,9 +403,6 @@ object Txt {
     const val TERM_INPUT_HINT = "输入命令"
 
     // ==================== 工具包 ====================
-
-    /** 工具页标题 */
-    const val TITLE_TOOLS = "工具包"
 
     /** 工具页副标题，参数为工具数量 */
     fun TOOL_SUB(count: Int): String = "已安装 $count 个"
@@ -460,15 +454,4 @@ object Txt {
     fun TOOL_RESULT_META(exitCode: Int, durationMs: Long): String =
         "退出码 $exitCode · ${durationMs}ms"
 
-    /** 首页快捷入口：终端 */
-    const val LINK_TERMINAL = "终端"
-
-    /** 首页快捷入口：终端说明 */
-    const val LINK_TERMINAL_DESC = "内置 Linux 环境与命令行"
-
-    /** 首页快捷入口：工具包 */
-    const val LINK_TOOLS = "工具包"
-
-    /** 首页快捷入口：工具包说明 */
-    const val LINK_TOOLS_DESC = "脚本化的小工具，带参数表单"
 }

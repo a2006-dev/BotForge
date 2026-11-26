@@ -104,13 +104,13 @@ private fun PluginCard(p: PluginManifest) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = p.name,
-                    color = c.textHigh,
+                    color = botColors.textHigh,
                     fontSize = FontSize.body,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = p.id,
-                    color = c.textLow,
+                    color = botColors.textLow,
                     fontSize = FontSize.caption
                 )
             }
@@ -124,29 +124,29 @@ private fun PluginCard(p: PluginManifest) {
             Spacer(Modifier.height(Spacing.xs))
             Text(
                 text = p.description,
-                color = c.textMid,
+                color = botColors.textMid,
                 fontSize = FontSize.caption
             )
         }
 
         Spacer(Modifier.height(Spacing.sm))
         Row {
-            Text(text = "API ", color = c.textLow, fontSize = FontSize.caption)
+            Text(text = "API ", color = botColors.textLow, fontSize = FontSize.caption)
             Text(
                 text = p.api.toString(),
-                color = if (compatible) c.textMid else c.textHigh,
+                color = if (compatible) botColors.textMid else botColors.textHigh,
                 fontSize = FontSize.caption
             )
             if (p.author.isNotBlank()) {
-                Text(text = "   " + Txt.PLUGIN_AUTHOR + " ", color = c.textLow, fontSize = FontSize.caption)
-                Text(text = p.author, color = c.textMid, fontSize = FontSize.caption)
+                Text(text = "   " + Txt.PLUGIN_AUTHOR + " ", color = botColors.textLow, fontSize = FontSize.caption)
+                Text(text = p.author, color = botColors.textMid, fontSize = FontSize.caption)
             }
         }
 
         Spacer(Modifier.height(Spacing.sm))
         Text(
             text = String.format(Txt.PLUGIN_CMD_FMT, p.commands.size),
-            color = c.textLow,
+            color = botColors.textLow,
             fontSize = FontSize.caption
         )
         Spacer(Modifier.height(Spacing.xxs))
@@ -154,16 +154,16 @@ private fun PluginCard(p: PluginManifest) {
             Row(modifier = Modifier.padding(vertical = Spacing.xxs)) {
                 Text(
                     text = "/" + c.command,
-                    color = c.textHigh,
+                    color = botColors.textHigh,
                     fontSize = FontSize.caption
                 )
                 Text(
                     text = "  " + c.description.ifBlank { c.usage },
-                    color = c.textLow,
+                    color = botColors.textLow,
                     fontSize = FontSize.caption
                 )
                 if (c.scope.contains("group")) {
-                    Text(text = "  群", color = c.textMid, fontSize = FontSize.caption)
+                    Text(text = "  群", color = botColors.textMid, fontSize = FontSize.caption)
                 }
             }
         }

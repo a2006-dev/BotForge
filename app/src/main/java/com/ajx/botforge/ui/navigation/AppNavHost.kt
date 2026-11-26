@@ -47,6 +47,7 @@ fun AppNavHost(
                 onOpenTerminal = { navController.navigate(Routes.TERMINAL) },
                 onOpenTools = { navController.navigate(Routes.TOOLS) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
+                onOpenPermissions = { navController.navigate(Routes.SETTINGS) },
                 onToggleService = onToggleService,
                 onRequestPermissions = onRequestPermissions
             )
