@@ -288,7 +288,15 @@ object MessageHandler {
         ev: BotClient.Event,
         text: String
     ): Boolean {
-        val cmd = text.substringBefore(' ').lowercase()
+        // 命令名解析：只取第一个词，且必须对「全角空格 / 连续空白 / CQ 前缀」都成立。
+        // 旧实现用 substringBefore(' ')，只认半角空格：用户用全角空格分隔时
+        // cmd 会变成整串「/绑定主人　ABC123」，匹配不到任何分支，于是消息
+        // 掉进模型当成闲聊，表现为「机器人答非所问」。
+        val head = text.trimStart()
+            .replace(Regex("^\\[CQ:[^\\]]*\\]"), "")
+            .trimStart()
+        val cmd = head.split(Regex("[\\s\\u3000]+"), limit = 2)
+            .firstOrNull().orEmpty().lowercase()
         val memKey = if (ev.scene == "group") {
             "${bot.id}_g_${ev.groupOpenId}"
         } else {
@@ -314,9 +322,16 @@ object MessageHandler {
             // 那样等于把主人位开放给第一个看到消息的人），
             // 群里只负责「校验并绑定」，所以这里只有一条指令。
             "/绑定主人", "/bindowner", "/设置主人" -> {
-                val code = text.trim().split(Regex("\\s+")).getOrNull(1).orEmpty()
+                // 与 cmd 解析保持同一套分隔规则（半角空格 / 全角空格 / 连续空白均可）
+                val code = head.split(Regex("[\\s\\u3000]+"), limit = 2)
+                    .getOrNull(1).orEmpty().trim()
                 if (code.isEmpty()) {
-                    reply(bot, ev, "用法：/绑定主人 验证码\n验证码请先在 BotForge APP 的「主人绑定」页生成。")
+                    reply(
+                        bot, ev,
+                        "用法：/绑定主人 验证码\n" +
+                            "验证码请先在 BotForge APP 的「主人绑定」页点「生成验证码」，\n" +
+                            "再点「复制命令」，把复制到的整行直接发给我即可。"
+                    )
                     return true
                 }
                 if (AuthStore.hasOwner) {

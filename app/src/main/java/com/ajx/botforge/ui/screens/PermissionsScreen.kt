@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.ajx.botforge.data.AuthStore
 import com.ajx.botforge.ui.components.PageTopBar
@@ -58,6 +60,7 @@ fun PermissionsScreen(onBack: () -> Unit) {
     var admins by remember { mutableStateOf(AuthStore.admins()) }
 
     var code by remember { mutableStateOf(AuthStore.pendingCode()?.code.orEmpty()) }
+    val clipboard = LocalClipboardManager.current
     var remainSec by remember { mutableStateOf(0L) }
     var showUnbind by remember { mutableStateOf(false) }
 
@@ -172,6 +175,16 @@ fun PermissionsScreen(onBack: () -> Unit) {
                             remainSec = (AuthStore.CODE_TTL_MS + 999) / 1000
                         }
                     )
+                    if (code.isNotEmpty()) {
+                        Spacer(Modifier.height(Spacing.sm))
+                        SecondaryButton(
+                            text = Txt.PERM_CODE_COPY,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                clipboard.setText(AnnotatedString(AuthStore.bindCommand(code)))
+                            }
+                        )
+                    }
                     Spacer(Modifier.height(Spacing.sm))
                     Text(
                         text = Txt.PERM_CODE_USAGE,

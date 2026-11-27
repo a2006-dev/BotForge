@@ -254,6 +254,15 @@ object AuthStore {
             .apply()
     }
 
+    /**
+     * 拼出可直接发送给机器人的完整绑定命令。
+     *
+     * 为什么要在 APP 里拼：验证码字符集是 ABCDEFGHJKMNPQRSTUVWXYZ23456789
+     * （刻意去掉 I/L/O 防看错），用户手抄仍容易出错；而命令格式一旦写错
+     * 就会被当成普通聊天，机器人答非所问。直接复制整行能彻底绕开手抄。
+     */
+    fun bindCommand(code: String): String = "/绑定主人 " + code.trim().uppercase()
+
     /** 脱敏显示 openid：只保留首尾各 4 位 */
     fun mask(openId: String): String {
         if (openId.length <= 10) return openId

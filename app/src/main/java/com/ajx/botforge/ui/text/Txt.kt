@@ -127,6 +127,7 @@ object Txt {
     const val PERM_CODE_EXPIRED = "验证码已过期，请重新生成"
     /** 使用方法 */
     const val PERM_CODE_USAGE = "在手机 QQ 里私聊机器人，直接发送这 8 位验证码。验证码一次性使用，绑定成功后立即失效。"
+    const val PERM_CODE_COPY = "复制命令（/绑定主人 验证码）"
     /** 管理员区标题 */
     const val PERM_ADMIN_TITLE = "管理员"
     /** 管理员为空 */
