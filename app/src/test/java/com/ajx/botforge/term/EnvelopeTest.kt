@@ -183,7 +183,8 @@ class EnvelopeTest {
         // 这里要求连续空行压成一行（但不同段落之间保留一个空行）。
         val raw = "__BF_BEGIN__:$token\na\n\n\n\nb\n__BF_END__:$token:0\n"
         val p = Envelope.parse(raw, token)
-        assertEquals("a\nb", p.output)
+        // 连续 N 个空行压成 1 个（保留段落感），不是全删。
+        assertEquals("a\n\nb", p.output)
     }
 
     @Test
