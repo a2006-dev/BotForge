@@ -3,7 +3,6 @@ package com.ajx.botforge.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,9 +23,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -326,29 +326,42 @@ private fun LinkRow(label: String, value: String, onClick: () -> Unit) {
         Text(text = "›", color = c.textLow, fontSize = FontSize.body)
     }
 }
-
 /**
- * 应用图标。
+ * 关于页顶部的应用标记。
  *
- * 这里不能给 painterResource 包 runCatching / let：它是 @Composable，
- * 一旦被塞进非 Composable 的 lambda（runCatching 的 block、let 的分支），
- * 组合器的节点插入栈就会错位，抛出
- * ComposeRuntimeError: Cannot end node insertion, there are no pending
- * operations that can be realized. —— 表现为整页闪退。
+ * 这里刻意**不加载任何图片资源**。原因：
  *
- * 因此这里一律直白调用，不做运行时兜底；安全性靠资源本身保证：
- * 用 ic_launcher（各密度都是真实 PNG），避开 mipmap-anydpi-v26 下
- * ic_launcher_round 那个自适应图标 XML（painterResource 不支持，会抛
- * IllegalArgumentException: Only VectorDrawables and rasterized asset
- * types are supported）。
+ * res/mipmap-anydpi-v26/ic_launcher.xml 与 ic_launcher_round.xml 都是
+ * <adaptive-icon>。在 API 26+ 设备上资源解析会优先选中 anydpi 版本，
+ * 于是 R.mipmap.ic_launcher 与 ic_launcher_round 拿到的都是 XML 而不是
+ * PNG，而 Compose 的 painterResource 只接受 VectorDrawable 与位图，
+ * 会抛 IllegalArgumentException（"Only VectorDrawables and rasterized
+ * asset types are supported"）——关于页直接闪退。
+ *
+ * 试过 B 方案 runCatching 包一层，但那会让组合器节点插入栈错位，
+ * 换一个 ComposeRuntimeError 崩掉，更糟。
+ *
+ * 最终方案：用 Canvas + Text 自己画，不碰资源系统，任何设备都不会崩。
  */
 @Composable
 private fun AppIconBadge() {
-    Image(
-        painter = painterResource(R.mipmap.ic_launcher),
-        contentDescription = null,
+    val c = botColors
+    Box(
         modifier = Modifier
             .size(88.dp)
             .clip(RoundedCornerShape(Radius.xl))
-    )
+            .background(
+                Brush.linearGradient(
+                    listOf(c.brand, c.brand.copy(alpha = 0.62f))
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "B",
+            color = Color.White,
+            fontSize = FontSize.display,
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
