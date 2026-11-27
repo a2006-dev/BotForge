@@ -82,13 +82,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Image(
-                    painter = painterResource(R.mipmap.ic_launcher_round),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(88.dp)
-                        .clip(RoundedCornerShape(Radius.xl))
-                )
+                AppIconBadge()
                 Spacer(Modifier.height(Spacing.md))
                 Text(
                     text = "BotForge",
@@ -330,5 +324,42 @@ private fun LinkRow(label: String, value: String, onClick: () -> Unit) {
             modifier = Modifier.weight(1f)
         )
         Text(text = "›", color = c.textLow, fontSize = FontSize.body)
+    }
+}
+
+/**
+ * 应用图标。
+ *
+ * 为什么要包一层 try：资源目录里同时存在位图与自适应图标（mipmap-anydpi-v26
+ * 下的 XML），而 Compose 的 painterResource 只接受矢量图或位图。一旦某个
+ * 密度/版本组合把 XML 解析进来，就会抛 IllegalArgumentException
+ * （「Only VectorDrawables and rasterized asset types are supported」），
+ * 直接把整个关于页崩掉。这里失败时退回纯色块 + 首字母，保证页面始终可用。
+ */
+@Composable
+private fun AppIconBadge() {
+    val c = botColors
+    val ok = runCatching { painterResource(R.mipmap.ic_launcher) }
+    ok.getOrNull()?.let { p ->
+        Image(
+            painter = p,
+            contentDescription = null,
+            modifier = Modifier
+                .size(88.dp)
+                .clip(RoundedCornerShape(Radius.xl))
+        )
+    } ?: Box(
+        modifier = Modifier
+            .size(88.dp)
+            .clip(RoundedCornerShape(Radius.xl))
+            .background(c.brand),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "B",
+            color = c.bg1,
+            fontSize = FontSize.title,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
