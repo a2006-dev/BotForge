@@ -38,7 +38,7 @@ object TerminalEnvironment {
 
     const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar"
     private const val MARKER = ".bf_ready"
-    private const val ROOTFS_VERSION = "alpine-3.19.0-r5"
+    private const val ROOTFS_VERSION = "alpine-3.19.0-r6"
     /** loader 的备份副本。Gradle 会按 ABI 过滤 jniLibs，纯符号文件容易被丢掉，
      *  所以 assets 里再放一份，运行期发现缺失就补回去。 */
     private const val ASSET_LOADER = "bin/libbfloader.so"
@@ -99,18 +99,18 @@ object TerminalEnvironment {
     /**
      * rootfs 落地目录。
      *
-     * 默认走外部存储的应用专属目录：私有 filesDir 位于 SELinux 的
-     * app_data_file 域，proot 在里面 exec guest 程序会被拒。
-     * 外部存储的 app 专属目录上下文更宽松，且用户可见、方便排查。
-     * 外部目录不可用时自动回退到 filesDir，不会因为选错路就不干活。
+     * 必须放在内部存储（filesDir 所在的内部分区）。
+     *
+     * 曾尝试放到外部存储 getExternalFilesDir()（/sdcard/Android/data/...），
+     * 结果解包只完成一小部分就失败：/sdcard 是 FUSE 文件系统，
+     * 不支持创建符号链接，而 Alpine 里 335 个 applet 全是指向
+     * busybox 的软链接，创建全部失败；退化成复制实体文件时，
+     * 目标文件往往还没解出来，一样失败。
+     *
+     * 内部存储是 f2fs，支持软链接，且实测 proot 在其中可以正常
+     * exec guest 程序。Config.termUseExternal 已废弃，保留只为兼容旧数据。
      */
-    fun rootfsDir(context: Context): File {
-        if (!com.ajx.botforge.data.Config.termUseExternal) {
-            return File(context.filesDir, "rootfs")
-        }
-        val ext = context.getExternalFilesDir(null)
-        return if (ext != null) File(ext, "rootfs") else File(context.filesDir, "rootfs")
-    }
+    fun rootfsDir(context: Context): File = File(context.filesDir, "rootfs")
 
     fun tmpDir(context: Context): File = File(context.filesDir, "tmp").apply { mkdirs() }
 
@@ -171,6 +171,17 @@ object TerminalEnvironment {
             if (!ensureRunLibs(context)) {
                 state = State.Failed("运行库准备失败")
                 return false
+            }
+            // 1.1.6 及以前把 rootfs 放在 /sdcard/Android/data/.../rootfs，
+            // 那是 FUSE 文件系统，不支持符号链接：Alpine 里 335 个指向
+            // busybox 的 applet 链接全部建不出来，解包会停在半路。
+            // 现在 rootfs 改回内部存储（f2fs），这里负责把旧的外部残留清掉，
+            // 否则那份残缺目录会一直占着空间，也容易让人误以为环境还在。
+            runCatching {
+                val legacy = context.getExternalFilesDir(null)?.let { File(it, "rootfs") }
+                if (legacy != null && legacy.exists() && legacy.absolutePath != dest.absolutePath) {
+                    legacy.deleteRecursively()
+                }
             }
             // 上次中断留下的半成品会与新解包混在一起，先清掉
             if (dest.exists() && !File(dest, MARKER).exists()) dest.deleteRecursively()
@@ -246,10 +257,15 @@ object TerminalEnvironment {
                             tar.copyBody(java.io.OutputStream.nullOutputStream())
                         }
                         count++
-                        if (count % 200 == 0) {
+                        // 进度回调不能太稀疏：tar 总共才 500 多条，原来每 200 条
+                        // 才回一次，前 200 条里全是软链接，界面上看起来就是
+                        // 「进度一直是 0」，用户无法判断是在跑还是卡死。
+                        if (count % 20 == 0 || count < 20) {
                             val pct = if (totalBytes > 0) {
                                 ((unpacked * 100) / totalBytes).toInt().coerceIn(0, 99)
-                            } else 0
+                            } else {
+                                (count * 100 / 600).coerceIn(0, 99)
+                            }
                             state = State.Unpacking(pct, name)
                             onProgress(pct, name)
                         }
@@ -270,7 +286,8 @@ object TerminalEnvironment {
             ) {
                 state = State.Failed(
                     "rootfs 解包不完整（bin=$binCount usr/bin=$usrBinCount " +
-                        "env=${expectEnv.exists()} sh=${expectSh.exists()} box=${expectBox.exists()}）"
+                        "env=${expectEnv.exists()} sh=${expectSh.exists()} box=${expectBox.exists()} " +
+                        "links=$count 软链接失败=$linkFallbacks 复制失败=$linkCopiesFailed）"
                 )
                 return false
             }
