@@ -257,13 +257,7 @@ object TerminalEnvironment {
         // libtalloc.so.2 时，proot 会在 exec 阶段直接链接失败。
         // 放在这里可以让每次启动都自动修复，无需用户重装或清数据。
         ensureRunLibs(context)
-                // 关掉 bootstrap 第二阶段的 fallback 自动执行。
-        //
-        // 必须放在这里而不是只在解包时做：1.4.5 及更早版本解包出来的
-        // rootfs 里仍然躺着那个 profile.d 脚本，而 isReady 只看 MARKER
-        // 和核心文件，判定就绪后永远不会重新解包，于是修复代码根本不会
-        // 被执行到。放在这里每次启动都跑一遍，函数本身幂等且开销可忽略。
-        runCatching { disableBootstrapFallback(rootfsDir(context)) }
+        runCatching { fixBootstrapFallback(rootfsDir(context)) }
         val marker = File(rootfsDir(context), MARKER)
         if (!marker.exists()) return false
         val verOk = runCatching { marker.readText().trim() == ROOTFS_VERSION }.getOrDefault(false)
@@ -422,7 +416,50 @@ object TerminalEnvironment {
                 )
                 return false
             }
-            disableBootstrapFallback(dest)
+            // ===== 关掉 Termux bootstrap 第二阶段的 fallback 自动执行 =====
+            //
+            // 真机现象（1.4.5）：每次启动会话都会先跑一大段
+            //   Starting fallback run of termux bootstrap second stage
+            //   [*] Running 'coreutils' package postinst
+            //   ...
+            //   [*] The termux bootstrap second stage completed successfully
+            // 然后 bash 直接退出，界面回到「会话未启动」，输入框发什么都没反应。
+            //
+            // 根因在 rootfs 自带的 /etc/profile.d/01-termux-bootstrap-second-stage-fallback.sh：
+            //   if [ ! -L ".../termux-bootstrap-second-stage.sh.lock" ]; then
+            //       echo "Starting fallback run ..."
+            //       "…/termux-bootstrap-second-stage.sh" || exit $?
+            //   fi
+            //   rm -f ".../01-termux-bootstrap-second-stage-fallback.sh"
+            //
+            // 这段由 /etc/profile 的 profile.d 循环自动 source。第二阶段
+            // 脚本内部结尾是 exec/exit 语义，返回值一旦非 0，`|| exit $?`
+            // 就把正在启动的交互 shell 一起结束掉，而且来不及 rm 掉自己，
+            // 于是下次启动再跑一遍 —— 表现为「每次都初始化、每次都不给提示符」。
+            //
+            // 修法：解包后预先建好那个 .lock 符号链接，让 `[ ! -L ]` 恒假，
+            // 整段 fallback 被跳过；再把 fallback 脚本本身删掉双保险。
+            // 第二阶段该装的东西（coreutils/python/nano 等 postinst）在
+            // 之前的手动验证里已经跑完并落地，不需要再执行一次。
+            runCatching {
+                val stageDir = File(dest, "etc/termux/termux-bootstrap/second-stage")
+                val lock = File(stageDir, "termux-bootstrap-second-stage.sh.lock")
+                if (!lock.exists()) {
+                    stageDir.mkdirs()
+                    // 指向不存在的目标也算「-L 为真」，用相对目标更省事
+                    runCatching {
+                        java.nio.file.Files.createSymbolicLink(
+                            lock.toPath(),
+                            File(stageDir, "termux-bootstrap-second-stage.sh").toPath()
+                        )
+                    }.onFailure {
+                        // 部分文件系统不支持硬建软链，退化成空文件也能让
+                        // `[ ! -L ]` 为真以外的分支走到，虽不理想但先保证能起来
+                        runCatching { lock.writeText("") }
+                    }
+                }
+                File(dest, "etc/profile.d/01-termux-bootstrap-second-stage-fallback.sh").delete()
+            }
 
             // 软链接降级成实体复制时，目标文件必须可执行，否则 proot 依然起不来
             listOf(expectEnv, expectSh, expectBash, expectProot).forEach { f ->
@@ -733,37 +770,13 @@ object TerminalEnvironment {
         env["TERM"] = "dumb"
     }
 
-    /**
-     * 关掉 Termux bootstrap 第二阶段的 fallback 自动执行。
-     *
-     * ## 问题
-     *
-     * rootfs 自带 /etc/profile.d/01-termux-bootstrap-second-stage-fallback.sh，
-     * 由 /etc/profile 里的 `for i in profile.d/*.sh` 循环自动 source：
-     *
-     * ```sh
-     * if [ ! -L ".../termux-bootstrap-second-stage.sh.lock" ]; then
-     *     echo "Starting fallback run of termux bootstrap second stage"
-     *     "…/termux-bootstrap-second-stage.sh" || exit $?
-     * fi
-     * rm -f ".../01-termux-bootstrap-second-stage-fallback.sh"
-     * ```
-     *
-     * 第二阶段脚本结尾是 exit 语义，返回值一旦非 0，`|| exit $?` 就会把
-     * 正在启动的交互 shell 一并结束。而脚本失败时来不及 rm 掉自己，
-     * 于是每次启动都重跑一遍，表现为：终端先刷一大段 postinst，最后一行
-     * 是 "completed successfully"，随后 bash 直接消失、回到「会话未启动」，
-     * 输入框发什么都没反应。
-     *
-     * ## 修法
-     *
-     * 预先建好那个 .lock 符号链接，让 `[ ! -L ]` 恒假，整段 fallback 被
-         * 跳过；再删掉 profile.d 脚本本身作为双保险。
-     *
-     * 第二阶段该装的东西（coreutils / python / nano 等 postinst）在镜像
-     * 构建阶段已经跑完并落盘，不需要在用户启动时再执行一次。
-     */
-    private fun disableBootstrapFallback(dest: File) {
+    // 关掉 rootfs 自带的 bootstrap 第二阶段 fallback。
+    // 那个 profile.d 脚本用 `second-stage.sh || exit $?`，第二阶段返回值
+    // 非 0 时会把正在启动的交互 shell 一起结束，而且来不及删掉自己，
+    // 于是每次启动都重跑一遍：终端先刷一大段 postinst，最后一行是
+    // completed successfully，随后 bash 消失、输入无反应。
+    // 修法是预先建好 .lock 符号链接让 [ ! -L ] 恒假，并删除该脚本。
+    private fun fixBootstrapFallback(dest: File) {
         val stageDir = File(dest, "etc/termux/termux-bootstrap/second-stage")
         val lock = File(stageDir, "termux-bootstrap-second-stage.sh.lock")
         if (!lock.exists()) {
@@ -773,11 +786,7 @@ object TerminalEnvironment {
                     lock.toPath(),
                     File(stageDir, "termux-bootstrap-second-stage.sh").toPath()
                 )
-            }.onFailure {
-                // 个别文件系统不支持建软链，退化成空文件。
-                // 此时 `[ ! -L ]` 仍为真，靠下面删除脚本那条兜底。
-                runCatching { lock.writeText("") }
-            }
+            }.onFailure { runCatching { lock.writeText("") } }
         }
         File(dest, "etc/profile.d/01-termux-bootstrap-second-stage-fallback.sh").delete()
     }
