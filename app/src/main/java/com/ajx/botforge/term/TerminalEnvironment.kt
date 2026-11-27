@@ -111,27 +111,24 @@ object TerminalEnvironment {
      * libbfproot.so 是合法的，复制到 filesDir 反而会被 SELinux 拒绝。
      */
     fun ensureProot(context: Context): File {
-        // proot 必须从私有目录执行，且必须和 libtalloc.so.2 同目录。
+        // 直接把 nativeLibraryDir 里的 libbfproot.so 交给 proot 执行，不复制。
         //
-        // 原因不是权限（实测 filesExecProbe = PROBE_OK，私有目录能 exec），
-        // 而是动态链接：proot 的 DT_NEEDED 里写的是 **libtalloc.so.2**，
-        // 而 APK 的 jniLibs 只能打进 libtalloc.so —— Android linker 严格按
-        // **文件名**查找，不做 soname 映射，于是直接
-        //   CANNOT LINK EXECUTABLE: library "libtalloc.so.2" not found
-        // nativeLibraryDir 不可写，补不出这个文件名；私有目录可写，
-        // 所以把 proot 和补名后的库都放这里，保证两者同目录。
-        val target = File(runLibDir(context), "proot")
+        // 这是真机反复验证后的结论：proot 从私有目录执行会稳定失败在
+        //   Cannot run program ".../files/lib/proot": error=13, Permission denied
+        // 即使 filesExecProbe 能过（私有目录确实允许 exec 一个小探针），
+        // 复制过去的 259KB 实体 proot 仍会被拦。而 /data/app/.../lib/arm64
+        // 属于 apk_data_file，是系统专门为可执行代码开放的路径，直接跑没问题。
+        //
+        // 之前之所以绕道私有目录，是为了补一个名为 libtalloc.so.2 的库
+        // （jniLibs 只能打 libtalloc.so，而 proot 的 DT_NEEDED 写的是带版本号的
+        // 名字，Android linker 严格按文件名查找）。现在改为通过
+        // LD_LIBRARY_PATH 同时挂上私有目录与 nativeLibraryDir，
+        // 私有目录里的 libtalloc.so.2 依然能补上，proot 本体却不必搬出去。
         val src = File(context.applicationInfo.nativeLibraryDir, "libbfproot.so")
-        val needCopy = !target.exists() || target.length() != src.length()
-        if (needCopy && src.exists() && src.length() > 0L) {
-            runCatching {
-                target.parentFile?.mkdirs()
-                src.copyTo(target, overwrite = true)
-            }
-        }
-        runCatching { target.setExecutable(true, false) }
-        return if (target.exists()) target else src
+        runCatching { src.setExecutable(true, false) }
+        return src
     }
+
 
     /**
      * 把一个位于 nativeLibraryDir 的 so 链接到私有目录，返回**软链接**的路径。
@@ -527,22 +524,18 @@ object TerminalEnvironment {
      * proot 在容器内 exec 一律 Permission denied。这里做兜底自愈。
      */
     fun ensureLoader(context: Context): File {
-        // loader 与 proot 放在同一目录（私有目录）。
+        // 与 ensureProot 同理：loader 必须从 nativeLibraryDir 直接使用。
         //
-        // 两者同目录可以避免 proot 解析 PROOT_LOADER 时出现路径错位，
-        // 也让整个运行时只依赖一个可写目录，行为更可预测。
-        val target = File(runLibDir(context), "loader")
+        // loader 是 proot 注入 guest 进程的小 stub（18136 字节）。
+        // 一旦把它复制到私有目录，proot 在 execve 阶段解析 PROOT_LOADER
+        // 时就会踩到 app_data_file 的 exec 限制，表现为
+        //   execve(...): Permission denied / the loader was not found
+        // 现在统一走 apk_data_file，与 proot 本体保持一致。
         val src = File(context.applicationInfo.nativeLibraryDir, "libbfloader.so")
-        val needCopy = !target.exists() || target.length() != src.length()
-        if (needCopy && src.exists() && src.length() > 0L) {
-            runCatching {
-                target.parentFile?.mkdirs()
-                src.copyTo(target, overwrite = true)
-            }
-        }
-        runCatching { target.setExecutable(true, false) }
-        return if (target.exists()) target else src
+        runCatching { src.setExecutable(true, false) }
+        return src
     }
+
     /**
      * 一次性把 proot 所需的环境变量灌进去。
      *
