@@ -53,18 +53,11 @@ import java.util.concurrent.TimeUnit
  */
 object HiddenExec {
 
-    /** 启动就绪标记。 */
-    private const val READY_MARKER = "__BF_READY__"
-
-    private const val BEGIN_PREFIX = "__BF_BEGIN__:"
-    private const val END_PREFIX = "__BF_END__:"
-    private const val PID_PREFIX = "__BF_PID__:"
+    /** 启动就绪标记。协议其余部分在 [Envelope] 里，那里有单元测试覆盖。 */
+    private const val READY_MARKER = Envelope.READY_MARKER
 
     /** 就绪等待上限。首次启动要解包 rootfs，给足时间。 */
     private const val READY_TIMEOUT_MS = 180_000L
-
-    /** 输出上限，防止模型被海量输出撑爆上下文。 */
-    private const val MAX_OUTPUT_CHARS = 60_000
 
     /** 常驻 shell。按 key 复用，key 变化（比如切了工作目录方案）就重建。 */
     @Volatile
@@ -116,8 +109,7 @@ object HiddenExec {
         }
 
         // 工作目录用 cd 前缀表达，容器内的路径由 proot 负责解析。
-        val body = if (workdir.isNullOrBlank()) trimmed
-        else "cd ${shellQuote(workdir)} || exit 1\n$trimmed"
+        val body = Envelope.withWorkdir(trimmed, workdir)
 
         val s = try {
             ensureShell(context)
@@ -126,7 +118,7 @@ object HiddenExec {
         }
 
         val token = UUID.randomUUID().toString().replace("-", "")
-        val envelope = buildEnvelope(body, token)
+        val envelope = Envelope.build(body, token)
 
         return try {
             s.writer.write(envelope)
@@ -233,10 +225,10 @@ object HiddenExec {
     }
 
     private fun collect(s: Shell, token: String, timeoutSec: Long): Result {
-        val endPrefix = "$END_PREFIX$token:"
+        val endPrefix = Envelope.END_PREFIX + token + ":"
         val deadline = System.currentTimeMillis() + timeoutSec * 1000L
         val sb = StringBuilder()
-        var finished = false
+        var sawEof = false
 
         while (System.currentTimeMillis() < deadline) {
             val chunk = s.chunks.poll(200, TimeUnit.MILLISECONDS)
@@ -244,75 +236,31 @@ object HiddenExec {
                 if (!s.process.isAlive) break
                 continue
             }
-            if (chunk.startsWith("\u0000EOF")) break
-            if (sb.length < MAX_OUTPUT_CHARS * 2) sb.append(chunk)
-            if (sb.indexOf(endPrefix) >= 0) {
-                finished = true
+            if (chunk.startsWith("\u0000EOF")) {
+                sawEof = true
                 break
             }
+            // 收集时就限长，避免超长输出把内存吃掉。
+            if (sb.length < Envelope.MAX_OUTPUT_CHARS * 2) sb.append(chunk)
+            if (sb.indexOf(endPrefix) >= 0) break
         }
 
-        val raw = sb.toString()
-        val beginPrefix = "$BEGIN_PREFIX$token"
-        // 去掉信封自身的回显：begin 行、pid 行、end 行都可能是 bash 的 echo，
-        // 不同配置下 -i 会不会回显不好保证，统一剥掉。
-        var out = raw
-        out = out.replace(beginPrefix, "")
-        out = out.replace(Regex(Regex.escape(PID_PREFIX + token) + ":\\d+"), "")
-        val endRegex = Regex(Regex.escape(endPrefix) + "(\\d+)")
-        val endMatch = endRegex.find(raw)
-
-        out = endRegex.replace(out, "")
-        out = out.replace(READY_MARKER, "")
-
-        val cleaned = out
-            .replace("\r\n", "\n")
-            .replace('\r', '\n')
-            .lines()
-            .dropWhile { it.isBlank() }
-            .dropLastWhile { it.isBlank() }
-            .joinToString("\n")
-            .let { if (it.length > MAX_OUTPUT_CHARS) it.take(MAX_OUTPUT_CHARS) + "\n…（输出过长已截断）" else it }
-
-        if (endMatch == null) {
-            if (!finished) {
-                val stillAlive = s.process.isAlive
-                if (!stillAlive) close()
-                return Result(
-                    false, cleaned, -1, timedOut = true,
-                    error = if (stillAlive) "命令超时（${timeoutSec}s），已放弃等待；shell 仍在运行"
-                    else "命令执行中 shell 意外退出"
-                )
-            }
+        val parsed = Envelope.parse(sb.toString(), token)
+        if (!parsed.finished) {
+            val alive = s.process.isAlive
+            if (!alive || sawEof) close()
+            return Result(
+                ok = false,
+                output = parsed.output,
+                exitCode = -1,
+                timedOut = alive,
+                error = if (alive) "命令超时（${timeoutSec}s），已放弃等待；shell 仍在运行"
+                else "命令执行中 shell 意外退出"
+            )
         }
-
-        val code = endMatch?.groupValues?.get(1)?.toIntOrNull() ?: -1
-        return Result(code == 0, cleaned, code)
+        val code = parsed.exitCode ?: -1
+        return Result(code == 0, parsed.output, code)
     }
-
-    private fun buildEnvelope(command: String, token: String): String {
-        val normalized = command.replace("\r\n", "\n").replace('\r', '\n')
-        val heredoc = "__BF_CMD_${token}__"
-        return buildString {
-            append("printf '%s\\n' '").append(BEGIN_PREFIX).append(token).append("'\n")
-            append("__bf_script=\"\${TMPDIR:-/tmp}/bf_").append(token).append(".sh\"\n")
-            append("cat >\"\$__bf_script\" <<'").append(heredoc).append("'\n")
-            append(normalized)
-            if (!normalized.endsWith("\n")) append('\n')
-            append(heredoc).append('\n')
-            // setsid + </dev/null：让命令彻底脱离外层 bash 的 stdin，
-            // 避免 cat/python 之类的程序抢走管道里的后续信封内容。
-            append("setsid /bin/bash --noprofile --norc \"\$__bf_script\" </dev/null &\n")
-            append("__bf_pid=\$!\n")
-            append("printf '%s:%s\\n' '").append(PID_PREFIX).append(token).append("' \"\$__bf_pid\"\n")
-            append("wait \"\$__bf_pid\"\n")
-            append("__bf_rc=\$?\n")
-            append("rm -f \"\$__bf_script\"\n")
-            append("printf '%s:%s\\n' '").append(END_PREFIX).append(token).append("' \"\$__bf_rc\"\n")
-        }
-    }
-
-    private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
 
     private fun tail(s: String): String {
         val t = s.takeLast(1500).trim()
