@@ -257,7 +257,7 @@ object TerminalEnvironment {
         // libtalloc.so.2 时，proot 会在 exec 阶段直接链接失败。
         // 放在这里可以让每次启动都自动修复，无需用户重装或清数据。
         ensureRunLibs(context)
-        // 关掉 bootstrap 第二阶段的 fallback 自动执行。
+                // 关掉 bootstrap 第二阶段的 fallback 自动执行。
         //
         // 必须放在这里而不是只在解包时做：1.4.5 及更早版本解包出来的
         // rootfs 里仍然躺着那个 profile.d 脚本，而 isReady 只看 MARKER
@@ -734,11 +734,6 @@ object TerminalEnvironment {
     }
 
     /**
-     * 组装 proot 命令行。
-     *
-     * @param command 要执行的命令；null 表示交互式登录 shell
-     */
-    /**
      * 关掉 Termux bootstrap 第二阶段的 fallback 自动执行。
      *
      * ## 问题
@@ -763,7 +758,7 @@ object TerminalEnvironment {
      * ## 修法
      *
      * 预先建好那个 .lock 符号链接，让 `[ ! -L ]` 恒假，整段 fallback 被
-     * 跳过；再删掉 profile.d 脚本本身作为双保险。
+         * 跳过；再删掉 profile.d 脚本本身作为双保险。
      *
      * 第二阶段该装的东西（coreutils / python / nano 等 postinst）在镜像
      * 构建阶段已经跑完并落盘，不需要在用户启动时再执行一次。
@@ -787,6 +782,11 @@ object TerminalEnvironment {
         File(dest, "etc/profile.d/01-termux-bootstrap-second-stage-fallback.sh").delete()
     }
 
+    /**
+     * 组装 proot 命令行。
+     *
+     * @param command 要执行的命令；null 表示交互式登录 shell
+     */
     fun buildCommand(context: Context, command: String?): List<String> {
         val pkg = context.packageName
         val rootfs = rootfsDir(context)
