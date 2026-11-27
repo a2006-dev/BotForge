@@ -401,6 +401,28 @@ object Config {
         get() = sp.getBoolean("agent_enabled", false)
         set(v) = sp.edit().putBoolean("agent_enabled", v).apply()
 
+    /**
+     * Linux 容器环境的使用方式，由用户显式选择。
+     *
+     * 参考 Operit 的做法：终端是「可插拔能力」，不是强制安装。
+     * 0 = 未配置（默认，不安装任何容器，模型只能用 Android sh）
+     * 1 = 内置 Alpine（解包随包附带的 rootfs，3.2MB）
+     * 2 = 已跳过（用户明确表示不要容器）
+     */
+    var termMode: Int
+        get() = sp.getInt("term_mode", 0)
+        set(v) = sp.edit().putInt("term_mode", v).apply()
+
+    /** 用户是否已就终端环境做过选择（避免每次进终端都弹选择页）。 */
+    var termChosen: Boolean
+        get() = sp.getBoolean("term_chosen", false)
+        set(v) = sp.edit().putBoolean("term_chosen", v).apply()
+
+    /** rootfs 存放位置偏好：true 表示放在外部存储，避开私有目录的 SELinux 限制。 */
+    var termUseExternal: Boolean
+        get() = sp.getBoolean("term_use_external", true)
+        set(v) = sp.edit().putBoolean("term_use_external", v).apply()
+
     var logEnabled: Boolean
         get() = sp.getBoolean("log_enabled", true)
         set(v) = sp.edit().putBoolean("log_enabled", v).apply()

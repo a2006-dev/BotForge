@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,7 +54,8 @@ fun SettingsScreen(
     onRequestBattery: () -> Unit,
     onRequestOverlay: () -> Unit,
     onApplyShizuku: () -> Unit,
-    onReloadBots: () -> Unit
+    onReloadBots: () -> Unit,
+    onOpenTerminal: () -> Unit = {}
 ) {
     val c = botColors
     var autoStart by remember { mutableStateOf(true) }
@@ -61,6 +63,8 @@ fun SettingsScreen(
     var autoRestart by remember { mutableStateOf(true) }
     var searchEnabled by remember { mutableStateOf(true) }
     var agentEnabled by remember { mutableStateOf(false) }
+    var termMode by remember { mutableIntStateOf(Config.termMode) }
+    var termChosen by remember { mutableStateOf(Config.termChosen) }
     var logEnabled by remember { mutableStateOf(true) }
     var searchTrigger by remember { mutableStateOf("model") }
 
@@ -70,6 +74,8 @@ fun SettingsScreen(
         autoRestart = Config.autoRestart
         searchEnabled = Config.searchEnabled
         agentEnabled = Config.agentEnabled
+        termMode = Config.termMode
+        termChosen = Config.termChosen
         logEnabled = Config.logEnabled
         searchTrigger = Config.searchTrigger
     }
@@ -185,6 +191,42 @@ fun SettingsScreen(
                 ) { v ->
                     agentEnabled = v
                     Config.agentEnabled = v
+                }
+                SettingDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "终端环境",
+                            color = c.textHigh,
+                            fontSize = FontSize.body,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = when {
+                                termMode == 1 -> "内置 Alpine · 模型可执行 python3 / apk / git"
+                                termChosen -> "已跳过 · 模型只能执行 Android 自带命令"
+                                else -> "未配置 · 建议选择一种方式"
+                            },
+                            color = if (termMode == 1) c.textLow else c.warning,
+                            fontSize = FontSize.caption
+                        )
+                    }
+                    SmallButton(
+                        text = if (termMode == 1) "重装" else "配置",
+                        onClick = {
+                            // 进入终端页会弹出配置选择
+                            termMode = 0
+                            termChosen = false
+                            Config.termMode = 0
+                            Config.termChosen = false
+                            onOpenTerminal()
+                        }
+                    )
                 }
             }
 

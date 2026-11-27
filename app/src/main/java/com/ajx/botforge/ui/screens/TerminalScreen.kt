@@ -82,6 +82,11 @@ fun TerminalScreen(onBack: () -> Unit) {
     var percent by remember { mutableStateOf(0) }
     var detail by remember { mutableStateOf("") }
     var failure by remember { mutableStateOf<String?>(null) }
+    // 用户没做过选择、且环境也没就绪时，先展示选择页，不擅自解包。
+    // 这是模仿 Operit 的做法：终端是可选能力，先问再装。
+    var showChooser by remember {
+        mutableStateOf(!com.ajx.botforge.data.Config.termChosen && !ready)
+    }
 
     // ---------- 会话 ----------
     var session by remember { mutableStateOf<TerminalSession?>(null) }
@@ -165,11 +170,14 @@ fun TerminalScreen(onBack: () -> Unit) {
         }
     }
 
-    // 进入页面时若尚未就绪，自动开始解包。
+    // 进入页面时不再无条件解包：
+    //  - 用户已选「内置 Alpine」且未就绪 → 开始解包
+    //  - 用户已跳过 → 什么都不做
+    //  - 还没选 → 弹选择页（showChooser）
     LaunchedEffect(Unit) {
         if (!TerminalEnvironment.hasBinaries(context)) {
             failure = Txt.TERM_NO_BINARY
-        } else if (!ready) {
+        } else if (!ready && com.ajx.botforge.data.Config.termMode == 1) {
             unpack()
         }
     }
@@ -194,6 +202,21 @@ fun TerminalScreen(onBack: () -> Unit) {
         )
 
         when {
+            // ---------- 用户还没选过：先问，不擅自安装 ----------
+            showChooser && !ready -> TerminalChooser(
+                onInstall = {
+                    com.ajx.botforge.data.Config.termMode = 1
+                    com.ajx.botforge.data.Config.termChosen = true
+                    showChooser = false
+                    unpack()
+                },
+                onSkip = {
+                    com.ajx.botforge.data.Config.termMode = 2
+                    com.ajx.botforge.data.Config.termChosen = true
+                    showChooser = false
+                }
+            )
+
             // ---------- 缺少可执行文件 ----------
             failure != null && !ready -> Box(
                 modifier = Modifier.fillMaxSize().padding(Spacing.lg),
@@ -465,4 +488,78 @@ internal fun stripAnsi(raw: String): String {
         i++
     }
     return out.toString()
+}
+
+/**
+ * 终端环境选择页。
+ *
+ * 参考 Operit 的设计：终端是「可选能力」，先把选项摆清楚，由用户决定装不装。
+ * 直接自动解包会让用户不知道发生了什么，失败了也没处反馈。
+ */
+@Composable
+private fun TerminalChooser(
+    onInstall: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val c = botColors
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+    ) {
+        AppCard(bordered = true) {
+            Text(
+                text = "Linux 容器环境",
+                color = c.textHigh,
+                fontSize = FontSize.bodyLarge
+            )
+            Text(
+                text = "安装后，模型可以在这台手机上真正执行 python3、apk add、git、gcc " +
+                    "等 Linux 命令；不装的话，模型依然能聊天、也能执行 Android 自带的基础命令，" +
+                    "只是没有完整的 Linux 工具链。",
+                color = c.textMid,
+                fontSize = FontSize.small,
+                modifier = Modifier.padding(top = Spacing.sm)
+            )
+        }
+
+        AppCard(bordered = true) {
+            Text(
+                text = "内置 Alpine（推荐）",
+                color = c.textHigh,
+                fontSize = FontSize.body
+            )
+            Text(
+                text = "随安装包附带，约 3 MB，本机解包，不联网下载。" +
+                    "解包位置在应用专属外部存储，方便查看和清理。",
+                color = c.textLow,
+                fontSize = FontSize.caption,
+                modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.sm)
+            )
+            SecondaryButton(
+                text = "安装内置环境",
+                onClick = onInstall,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        AppCard(bordered = true) {
+            Text(
+                text = "暂不安装",
+                color = c.textHigh,
+                fontSize = FontSize.body
+            )
+            Text(
+                text = "模型只使用 Android 自带命令（ls / cat / pm 等），没有 apt 与 python3。" +
+                    "之后可随时在 设置 → 能力 → 终端环境 里重新开启。",
+                color = c.textLow,
+                fontSize = FontSize.caption,
+                modifier = Modifier.padding(top = Spacing.xs, bottom = Spacing.sm)
+            )
+            SecondaryButton(
+                text = "跳过",
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
 }

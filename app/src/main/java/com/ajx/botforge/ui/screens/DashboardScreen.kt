@@ -144,10 +144,7 @@ fun DashboardScreen(
                 onRequestPermissions = onRequestPermissions,
                 onDone = onOpenBots
             )
-            return@Column
-        }
-
-        LazyColumn(
+        } else LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 start = Spacing.lg, end = Spacing.lg,

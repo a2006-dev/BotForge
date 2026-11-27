@@ -96,9 +96,36 @@ object TerminalEnvironment {
 
     fun prootPath(context: Context): File = File(libDir(context), "libbfproot.so")
 
-    fun rootfsDir(context: Context): File = File(context.filesDir, "rootfs")
+    /**
+     * rootfs 落地目录。
+     *
+     * 默认走外部存储的应用专属目录：私有 filesDir 位于 SELinux 的
+     * app_data_file 域，proot 在里面 exec guest 程序会被拒。
+     * 外部存储的 app 专属目录上下文更宽松，且用户可见、方便排查。
+     * 外部目录不可用时自动回退到 filesDir，不会因为选错路就不干活。
+     */
+    fun rootfsDir(context: Context): File {
+        if (!com.ajx.botforge.data.Config.termUseExternal) {
+            return File(context.filesDir, "rootfs")
+        }
+        val ext = context.getExternalFilesDir(null)
+        return if (ext != null) File(ext, "rootfs") else File(context.filesDir, "rootfs")
+    }
 
     fun tmpDir(context: Context): File = File(context.filesDir, "tmp").apply { mkdirs() }
+
+    /**
+     * 用户是否同意使用内置容器。
+     *
+     * Operit 把终端做成「可插拔能力」：没配置就是没有，而不是反复尝试并失败。
+     * 这里同样尊重用户选择——只有明确选了「内置 Alpine」才认为该建环境。
+     * 未选择时保持沉默（返回 false），由 UI 引导用户去选，而不是后台偷偷解包。
+     */
+    fun userWantsContainer(): Boolean =
+        com.ajx.botforge.data.Config.termMode == 1
+
+    /** 用户是否已经就终端环境做过选择。 */
+    fun userHasChosen(): Boolean = com.ajx.botforge.data.Config.termChosen
 
     /** proot 本体与依赖是否随包存在。 */
     fun hasBinaries(context: Context): Boolean {

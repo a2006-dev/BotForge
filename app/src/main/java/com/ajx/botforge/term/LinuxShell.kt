@@ -62,16 +62,26 @@ object LinuxShell {
 
         // 首次调用时 rootfs 可能还没解包（QQ 后台收到消息不会经过终端页 UI）。
         // 这里主动补一次，否则模型永远只能拿到降级的 Android sh。
+        // 尊重用户选择：没选「内置 Alpine」就不在后台偷偷解包，
+        // 直接走 Android sh，并在结果里说明原因，让模型知道该怎么引导用户。
+        if (!TerminalEnvironment.userWantsContainer()) {
+            val why = if (TerminalEnvironment.userHasChosen())
+                "用户已跳过 Linux 容器配置"
+            else
+                "用户尚未配置 Linux 容器（可在 设置 → 终端环境 里选择安装）"
+            Logger.i("LinuxShell", why)
+            return runAndroidSh(command, timeoutSec, why)
+        }
         var ready = runCatching { TerminalEnvironment.isReady(context) }.getOrDefault(false)
         if (!ready) {
             ready = runCatching {
-                Logger.i("LinuxShell", "首次使用，开始解包 rootfs")
+                Logger.i("LinuxShell", "环境未就绪，开始解包 rootfs 到 " + TerminalEnvironment.rootfsDir(context).absolutePath)
                 TerminalEnvironment.ensureReady(context)
             }.getOrDefault(false)
         }
         if (!ready) {
             Logger.w("LinuxShell", "Linux 环境未就绪，退化到 Android sh")
-            return runAndroidSh(command, timeoutSec)
+            return runAndroidSh(command, timeoutSec, "Linux 容器初始化失败")
         }
 
         val cd = workingDir?.trim()?.takeIf { it.isNotEmpty() && it.startsWith("/") }
@@ -238,7 +248,11 @@ object LinuxShell {
      * 没有 apt / python3 / git，但 cat / ls / df / getprop 这些还能用，
      * 至少让模型能查点东西，而不是全线报错。
      */
-    private fun runAndroidSh(command: String, timeoutSec: Long): Result {
+    private fun runAndroidSh(
+        command: String,
+        timeoutSec: Long,
+        reason: String? = null
+    ): Result {
         return try {
             val pb = ProcessBuilder("/system/bin/sh", "-c", command)
             pb.redirectErrorStream(true)
@@ -272,7 +286,7 @@ object LinuxShell {
                 return Result(
                     -1,
                     clip(synchronized(sb) { sb.toString() }.trim()),
-                    "执行超时（" + t + "s）",
+                    reason ?: ("执行超时（" + t + "s）"),
                     true
                 )
             }
@@ -280,11 +294,11 @@ object LinuxShell {
             Result(
                 proc.exitValue(),
                 clip(synchronized(sb) { sb.toString() }.trim()),
-                null,
+                reason,
                 true
             )
         } catch (e: Throwable) {
-            Result(-1, "", "执行出错：" + e.message, true)
+            Result(-1, "", reason ?: ("执行出错：" + e.message), true)
         }
     }
 
