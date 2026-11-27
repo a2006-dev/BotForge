@@ -82,7 +82,7 @@ object BuiltinTools {
                 "[提示] Linux 容器还没准备好，本次退回 Android 自带 sh 执行（没有 apt/python3）。" +
                     "能在终端页看到解包进度。\n"
             } else ""
-            r.error?.let { return "$head错误：$it" + (if (r.output.isNotEmpty()) "\n$r.output" else "") }
+            r.error?.let { return head + "错误：" + it + (if (r.output.isNotEmpty()) "\n" + r.output else "") }
             val body = if (r.output.isEmpty()) "（无输出，退出码 ${r.code}）"
             else if (r.code == 0) r.output
             else "退出码 ${r.code}\n${r.output}"
