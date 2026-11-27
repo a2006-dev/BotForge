@@ -1,6 +1,7 @@
 package com.ajx.botforge.ai.tool
 
 import com.ajx.botforge.App
+import com.ajx.botforge.term.HiddenExec
 import com.ajx.botforge.data.Logger
 import com.ajx.botforge.term.LinuxShell
 import com.ajx.botforge.term.TerminalEnvironment
@@ -40,11 +41,12 @@ object BuiltinTools {
     object RunCommandTool : Tool {
         override val name = "run_command"
         override val description =
-            "在手机的 Linux 容器（Alpine）里执行一条 shell 命令并返回输出。" +
-                "支持 apk add / python3 / git / gcc / curl 等，支持管道、重定向、&&。" +
-                "容器内以 root 身份运行，工作目录默认 /root。" +
-                "宿主存储挂在 /sdcard。" +
-                "耗时命令（如安装软件包）可调大 timeout，最长 300 秒。" +
+            "在手机的 Termux 用户空间（proot 容器，Debian/Ubuntu 系 apt 包管理）里" +
+                "执行一条或多行 shell 命令，返回标准输出与标准错误合并后的文本。" +
+                "支持管道、重定向、&&、for 循环、heredoc；支持 apt install / python3 / pip / git / curl。" +
+                "多条命令可直接换行写在一起，会按顺序执行。" +
+                "宿主存储挂在 /sdcard，家目录是容器内的 /data/data/com.termux/files/home。" +
+                "每条命令都有独立退出码；安装类慢命令可把 timeout 调到 300。" +
                 "不要用它做破坏性操作（rm -rf /、改系统分区）。"
 
         override val parameters: JSONObject = JSONObject()
@@ -79,16 +81,15 @@ object BuiltinTools {
             val workdir = args.optString("workdir").takeIf { it.isNotBlank() }
             val timeout = args.optInt("timeout", 120).coerceIn(5, 300).toLong()
 
-            val r = LinuxShell.run(App.instance, cmd, workdir, timeout)
-            val head = if (r.degraded) {
-                "[提示] Linux 容器还没准备好，本次退回 Android 自带 sh 执行（没有 apt/python3）。" +
-                    "能在终端页看到解包进度。\n"
-            } else ""
-            r.error?.let { return head + "错误：" + it + (if (r.output.isNotEmpty()) "\n" + r.output else "") }
-            val body = if (r.output.isEmpty()) "（无输出，退出码 ${r.code}）"
-            else if (r.code == 0) r.output
-            else "退出码 ${r.code}\n${r.output}"
-            return head + body
+            // 走隐藏执行器：常驻 bash + 标记信封，不需要 PTY，
+            // 也不依赖界面上的交互式会话是否还活着。
+            val r = HiddenExec.run(App.instance, cmd, timeout, workdir)
+            r.error?.let { err ->
+                val out = r.output
+                return if (out.isEmpty()) "错误：$err" else "错误：$err\n\n$out"
+            }
+            return if (r.output.isEmpty()) "（无输出，退出码 ${r.exitCode}）"
+            else r.output
         }
     }
 

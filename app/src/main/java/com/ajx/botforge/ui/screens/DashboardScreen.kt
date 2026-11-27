@@ -646,8 +646,15 @@ private fun QuickLinks(
         QuickDivider()
         QuickRow(Txt.LINK_PLUGIN, Txt.LINK_PLUGIN_DESC, onOpenPlugins)
         QuickDivider()
-        QuickRow(Txt.LINK_TERMINAL, Txt.LINK_TERMINAL_DESC, onOpenTerminal)
-        QuickDivider()
+        // 终端入口从主界面移除。
+        //
+        // 模型执行命令走的是 run_command 工具内部的隐藏执行器（HiddenExec）：
+        // 常驻 bash + 标记信封，全程不需要界面上那个交互式会话。
+        // 把终端摆在这里只会让人误以为「必须先去点启动会话，AI 才能跑命令」，
+        // 而两者其实完全独立，徒增困惑。
+        //
+        // TerminalScreen 与 Routes.TERMINAL 都保留，从设置页仍可进入，
+        // 供人工排查 rootfs / 环境变量问题。
         QuickRow(Txt.LINK_TOOLS, Txt.LINK_TOOLS_DESC, onOpenTools)
         QuickDivider()
         QuickRow(Txt.LINK_PERMISSIONS, Txt.LINK_PERMISSIONS_DESC, onOpenPermissions)

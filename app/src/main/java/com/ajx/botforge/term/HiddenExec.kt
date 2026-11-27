@@ -1,0 +1,321 @@
+package com.ajx.botforge.term
+
+import android.content.Context
+import java.io.File
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+/**
+ * 隐藏执行器：给模型用、不在界面上露出来的终端。
+ *
+ * ## 为什么不再用交互式 PTY
+ *
+ * 1.5.x / 1.6.x 一直在和「会话存活」较劲：ProcessBuilder 给的是匿名管道，
+ * `isatty()` 为 false，bash 打印提示符后立刻读到 EOF 就 logout；改用
+ * `forkpty` 又要处理 soname 补名、SIGWINCH、作业控制等等，代码量和失败面
+ * 都大，而且**对模型执行命令这个场景毫无收益**。
+ *
+ * 模型要的是「丢一条命令进去，拿回输出和退出码」，不需要光标、不需要
+ * 行编辑、不需要 Ctrl+C 之外的交互。所以这里换掉 PTY，改用 Operit 的做法：
+ * 起一个**常驻的 bash 进程**（管道即可），用**标记信封**把命令包起来，
+ * 靠结束标记判断这条命令跑完没跑完。
+ *
+ * ## 标记信封协议
+ *
+ * 一次性启动：
+ * ```
+ * proot ... /bin/bash --noprofile --norc -i
+ * ```
+ * （加 -i 让 bash 不因为 stdin 暂时没数据就退出，它只在读到 EOF 时退出，
+ *   而我们全程只关进程、不关 stdin。）
+ *
+ * 每条命令写进去的是：
+ * ```sh
+ * printf '%s\n' '__BF_BEGIN__:<token>'
+ * cat > "$TMPDIR/bf_<token>.sh" <<'__BF_CMD_<token>__'
+ * <用户命令>
+ * __BF_CMD_<token>__
+ * setsid /bin/bash --noprofile --norc "$TMPDIR/bf_<token>.sh" </dev/null &
+ * __bf_pid=$!
+ * printf '%s:%s\n' '__BF_PID__:<token>' "$__bf_pid"
+ * wait "$__bf_pid"
+ * __bf_rc=$?
+ * rm -f "$TMPDIR/bf_<token>.sh"
+ * printf '%s:%s\n' '__BF_END__:<token>' "$__bf_rc"
+ * ```
+ *
+ * 解析端只认 `__BF_END__:<token>:` 之后的数字，即退出码。
+ * 用 `setsid` + `</dev/null` 是为了让命令**脱离 bash 的 stdin**：
+ * 否则 `cat`、`python3` 这类会读 stdin 的程序会跟外层 bash 抢管道，
+ * 把后续信封内容吞掉，表现为「命令跑完了但拿不到结束标记」。
+ *
+ * 这套做法不需要 PTY、不需要 NDK、不依赖 soname 补名，纯 Java 层可控。
+ */
+object HiddenExec {
+
+    /** 启动就绪标记。 */
+    private const val READY_MARKER = "__BF_READY__"
+
+    private const val BEGIN_PREFIX = "__BF_BEGIN__:"
+    private const val END_PREFIX = "__BF_END__:"
+    private const val PID_PREFIX = "__BF_PID__:"
+
+    /** 就绪等待上限。首次启动要解包 rootfs，给足时间。 */
+    private const val READY_TIMEOUT_MS = 180_000L
+
+    /** 输出上限，防止模型被海量输出撑爆上下文。 */
+    private const val MAX_OUTPUT_CHARS = 60_000
+
+    /** 常驻 shell。按 key 复用，key 变化（比如切了工作目录方案）就重建。 */
+    @Volatile
+    private var shell: Shell? = null
+
+    private class Shell(
+        val key: String,
+        val process: Process,
+        val writer: java.io.BufferedWriter,
+        val reader: Thread,
+        val chunks: java.util.concurrent.LinkedBlockingQueue<String>,
+        @Volatile var closed: Boolean = false
+    )
+
+    data class Result(
+        val ok: Boolean,
+        val output: String,
+        val exitCode: Int,
+        val timedOut: Boolean = false,
+        val error: String? = null
+    )
+
+    /** 关掉常驻 shell。App 退出或环境重建时调用。 */
+    @Synchronized
+    fun close() {
+        val s = shell ?: return
+        shell = null
+        s.closed = true
+        runCatching { s.writer.close() }
+        runCatching { s.process.destroy() }
+        runCatching { s.reader.interrupt() }
+    }
+
+    /**
+     * 在容器内执行一条命令，等它跑完并返回输出。
+     *
+     * @param command 用户命令，可以多行、可以带管道重定向
+     * @param timeoutSec 超时秒数
+     */
+    fun run(
+        context: Context,
+        command: String,
+        timeoutSec: Long = 120L,
+        workdir: String? = null
+    ): Result {
+        val trimmed = command.trim()
+        if (trimmed.isEmpty()) {
+            return Result(false, "", -1, error = "命令为空")
+        }
+
+        // 工作目录用 cd 前缀表达，容器内的路径由 proot 负责解析。
+        val body = if (workdir.isNullOrBlank()) trimmed
+        else "cd ${shellQuote(workdir)} || exit 1\n$trimmed"
+
+        val s = try {
+            ensureShell(context)
+        } catch (e: Throwable) {
+            return Result(false, "", -1, error = "启动 shell 失败: " + (e.message ?: e.javaClass.simpleName))
+        }
+
+        val token = UUID.randomUUID().toString().replace("-", "")
+        val envelope = buildEnvelope(body, token)
+
+        return try {
+            s.writer.write(envelope)
+            s.writer.flush()
+        } catch (e: Throwable) {
+            close()
+            return Result(false, "", -1, error = "写入命令失败: " + (e.message ?: e.javaClass.simpleName))
+        }.let {
+            collect(s, token, timeoutSec)
+        }
+    }
+
+    // ---------------------------------------------------------------- 内部实现
+
+    @Synchronized
+    private fun ensureShell(context: Context): Shell {
+        val key = "proot-bash-v1"
+        shell?.let { existing ->
+            if (existing.key == key && !existing.closed && existing.process.isAlive) {
+                return existing
+            }
+            close()
+        }
+        val created = createShell(context, key)
+        shell = created
+        return created
+    }
+
+    private fun createShell(context: Context, key: String): Shell {
+        // 复用 TerminalEnvironment 的 argv 构造：proot 本体、绑定、
+        // ld.config 等等全部沿用，唯一区别是最后执行的程序是 bash -i。
+        val argv = TerminalEnvironment.buildHiddenExecCommand(context, READY_MARKER)
+        val env = TerminalEnvironment.buildPtyEnvironment(context)
+
+        val pb = ProcessBuilder(argv)
+        pb.directory(context.filesDir)
+        pb.redirectErrorStream(true)
+        pb.environment().clear()
+        pb.environment().putAll(env)
+        val proc = pb.start()
+
+        val chunks = java.util.concurrent.LinkedBlockingQueue<String>()
+        val reader = Thread {
+            try {
+                val input = proc.inputStream
+                val buffer = ByteArray(4096)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    if (n > 0) chunks.offer(String(buffer, 0, n, Charsets.UTF_8))
+                }
+            } catch (_: Throwable) {
+                // 进程被杀或流关闭，正常路径
+            } finally {
+                chunks.offer("\u0000EOF\u0000")
+            }
+        }
+        reader.isDaemon = true
+        reader.name = "bf-hidden-exec-reader"
+        reader.start()
+
+        val writer = proc.outputStream.bufferedWriter(Charsets.UTF_8)
+        val s = Shell(key, proc, writer, reader, chunks)
+
+        // 等就绪标记。解包 rootfs 时这里会等比较久，但只在第一次。
+        val ready = awaitReady(s)
+        if (!ready.ok) {
+            close()
+            throw IllegalStateException(ready.error ?: "shell 未能就绪")
+        }
+        return s
+    }
+
+    private fun awaitReady(s: Shell): Result {
+        val deadline = System.currentTimeMillis() + READY_TIMEOUT_MS
+        val sb = StringBuilder()
+        while (System.currentTimeMillis() < deadline) {
+            val chunk = s.chunks.poll(200, TimeUnit.MILLISECONDS)
+            if (chunk == null) {
+                if (!s.process.isAlive) {
+                    return Result(
+                        false, "", -1,
+                        error = "shell 在就绪前退出。输出尾部：\n" + tail(sb.toString())
+                    )
+                }
+                continue
+            }
+            if (chunk.startsWith("\u0000EOF")) {
+                return Result(
+                    false, "", -1,
+                    error = "shell 输出流结束（就绪前退出）。输出尾部：\n" + tail(sb.toString())
+                )
+            }
+            sb.append(chunk)
+            if (sb.indexOf(READY_MARKER) >= 0) {
+                // 就绪前的解包日志对模型没意义，直接丢弃。
+                return Result(true, "", 0)
+            }
+        }
+        return Result(
+            false, "", -1,
+            error = "等待 shell 就绪超时。输出尾部：\n" + tail(sb.toString())
+        )
+    }
+
+    private fun collect(s: Shell, token: String, timeoutSec: Long): Result {
+        val endPrefix = "$END_PREFIX$token:"
+        val deadline = System.currentTimeMillis() + timeoutSec * 1000L
+        val sb = StringBuilder()
+        var finished = false
+
+        while (System.currentTimeMillis() < deadline) {
+            val chunk = s.chunks.poll(200, TimeUnit.MILLISECONDS)
+            if (chunk == null) {
+                if (!s.process.isAlive) break
+                continue
+            }
+            if (chunk.startsWith("\u0000EOF")) break
+            if (sb.length < MAX_OUTPUT_CHARS * 2) sb.append(chunk)
+            if (sb.indexOf(endPrefix) >= 0) {
+                finished = true
+                break
+            }
+        }
+
+        val raw = sb.toString()
+        val beginPrefix = "$BEGIN_PREFIX$token"
+        // 去掉信封自身的回显：begin 行、pid 行、end 行都可能是 bash 的 echo，
+        // 不同配置下 -i 会不会回显不好保证，统一剥掉。
+        var out = raw
+        out = out.replace(beginPrefix, "")
+        out = out.replace(Regex(Regex.escape(PID_PREFIX + token) + ":\\d+"), "")
+        val endRegex = Regex(Regex.escape(endPrefix) + "(\\d+)")
+        val endMatch = endRegex.find(raw)
+
+        out = endRegex.replace(out, "")
+        out = out.replace(READY_MARKER, "")
+
+        val cleaned = out
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .lines()
+            .dropWhile { it.isBlank() }
+            .dropLastWhile { it.isBlank() }
+            .joinToString("\n")
+            .let { if (it.length > MAX_OUTPUT_CHARS) it.take(MAX_OUTPUT_CHARS) + "\n…（输出过长已截断）" else it }
+
+        if (endMatch == null) {
+            if (!finished) {
+                val stillAlive = s.process.isAlive
+                if (!stillAlive) close()
+                return Result(
+                    false, cleaned, -1, timedOut = true,
+                    error = if (stillAlive) "命令超时（${timeoutSec}s），已放弃等待；shell 仍在运行"
+                    else "命令执行中 shell 意外退出"
+                )
+            }
+        }
+
+        val code = endMatch?.groupValues?.get(1)?.toIntOrNull() ?: -1
+        return Result(code == 0, cleaned, code)
+    }
+
+    private fun buildEnvelope(command: String, token: String): String {
+        val normalized = command.replace("\r\n", "\n").replace('\r', '\n')
+        val heredoc = "__BF_CMD_${token}__"
+        return buildString {
+            append("printf '%s\\n' '").append(BEGIN_PREFIX).append(token).append("'\n")
+            append("__bf_script=\"\${TMPDIR:-/tmp}/bf_").append(token).append(".sh\"\n")
+            append("cat >\"\$__bf_script\" <<'").append(heredoc).append("'\n")
+            append(normalized)
+            if (!normalized.endsWith("\n")) append('\n')
+            append(heredoc).append('\n')
+            // setsid + </dev/null：让命令彻底脱离外层 bash 的 stdin，
+            // 避免 cat/python 之类的程序抢走管道里的后续信封内容。
+            append("setsid /bin/bash --noprofile --norc \"\$__bf_script\" </dev/null &\n")
+            append("__bf_pid=\$!\n")
+            append("printf '%s:%s\\n' '").append(PID_PREFIX).append(token).append("' \"\$__bf_pid\"\n")
+            append("wait \"\$__bf_pid\"\n")
+            append("__bf_rc=\$?\n")
+            append("rm -f \"\$__bf_script\"\n")
+            append("printf '%s:%s\\n' '").append(END_PREFIX).append(token).append("' \"\$__bf_rc\"\n")
+        }
+    }
+
+    private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+
+    private fun tail(s: String): String {
+        val t = s.takeLast(1500).trim()
+        return if (t.isEmpty()) "（无输出）" else t
+    }
+}

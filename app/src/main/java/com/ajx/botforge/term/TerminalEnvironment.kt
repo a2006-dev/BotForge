@@ -794,7 +794,33 @@ object TerminalEnvironment {
         env["PROOT_LOADER"] = File(lib, "libbfloader.so").absolutePath
         env["PROOT_TMP_DIR"] = tmp.absolutePath
         env["PROOT_NO_SECCOMP"] = "1"
+        // 1.6.0 真机报错：
+        //   CANNOT LINK EXECUTABLE ".../lib/arm64/libbfproot.so":
+        //   library "libtalloc.so.2" not found: needed by main executable
+        // 原因：jniLibs 只能打包 lib*.so，proot 的 DT_NEEDED 写的却是带版本号的
+        //   libtalloc.so.2，Android linker 严格按文件名匹配，LD_LIBRARY_PATH
+        //   里指到的是私有目录，而私有目录那份补名副本可能没建出来。
+        //
+        // 这里在**启动前同步确保**补名副本存在；仍失败时退化为 LD_PRELOAD，
+        // 因为 LD_PRELOAD 是按完整路径直接加载，不走 soname 匹配。
+        val tallocAlias = File(runLib, "libtalloc.so.2")
+        val tallocSrc = File(lib, "libtalloc.so")
+        if (!tallocAlias.exists() || tallocAlias.length() <= 0L) {
+            runCatching { tallocSrc.copyTo(tallocAlias, overwrite = true) }
+        }
+        val shmemAlias = File(runLib, "libandroid-shmem.so")
+        val shmemSrc = File(lib, "libandroid-shmem.so")
+        if (!shmemAlias.exists() || shmemAlias.length() <= 0L) {
+            runCatching { shmemSrc.copyTo(shmemAlias, overwrite = true) }
+        }
         env["LD_LIBRARY_PATH"] = "${runLib.absolutePath}:${lib.absolutePath}"
+        // 补名副本没建出来时，用 PRELOAD 兜住 soname 匹配不上的库。
+        val preloads = mutableListOf<String>()
+        if (!tallocAlias.exists() || tallocAlias.length() <= 0L) {
+            if (tallocSrc.exists()) preloads += tallocSrc.absolutePath
+        }
+        if (preloads.isNotEmpty()) env["LD_PRELOAD"] = preloads.joinToString(" ")"
+
 
         // 宿主侧基础环境
         env["PATH"] = "/system/bin:/system/xbin:/vendor/bin:/sbin:/bin"
@@ -835,6 +861,56 @@ object TerminalEnvironment {
      *
      * @param command 要执行的命令；null 表示交互式登录 shell
      */
+    /**
+     * 构造「隐藏执行器」的 argv。
+     *
+     * 与 [buildCommand] 的差别只在最后一段：那边是把一条命令 exec 掉，
+     * 这边要启动一个**常驻的 bash -i**，之后所有命令都通过管道写进它，
+     * 用标记信封判断每条命令何时结束（见 [HiddenExec]）。
+     *
+     * 关键点：
+     * - `bash -i` 必须先打印 [readyMarker]，上层据此确认 rootfs 已解包、
+     *   绑定生效、容器内 bash 真的起来了。首次会把解包日志一起刷出来，
+     *   上层在就绪前全部丢弃，不给模型看。
+     * - **不能**用 `exec`，exec 会替换掉 proot 进程，管道那头就断了。
+     * - 最后 `exec cat` 是刻意的：bash 退出后让进程挂着别再刷东西，
+     *   避免容器崩溃时反复打错误日志污染管道。实际由上层 destroy 结束。
+     */
+    fun buildHiddenExecCommand(context: Context, readyMarker: String): List<String> {
+        val base = buildCommand(context, null)
+        // buildCommand(null) 返回的是「交互会话」版 argv，末尾是
+        // bash -c '<一长串 script>'，里面用 script 包了 PTY。
+        // 这里要的是更简单的东西：直接 bash -i，自己打印就绪标记。
+        // 所以从 argv 里剥掉末尾的 -c 与其脚本，重新拼一段。
+        val cut = base.indexOfLast { it == "-c" }
+        val head = if (cut > 0) base.subList(0, cut) else base
+
+        val script = buildString {
+            append("export PREFIX=").append(TERMUX_PREFIX).append(';')
+            append("export PATH=").append(TERMUX_PREFIX).append("/bin:")
+                .append(TERMUX_PREFIX).append("/bin/applets:/system/bin;")
+            append("export LD_LIBRARY_PATH=").append(TERMUX_PREFIX).append("/lib;")
+            append("export HOME=").append(TERMUX_HOME).append(';')
+            append("export TMPDIR=").append(TERMUX_PREFIX).append("/tmp;")
+            append("export TERM=dumb;")
+            append("export LANG=C.UTF-8;")
+            append("export PROOT_NO_SECCOMP=1;")
+            append("mkdir -p \"\$HOME\" \"\$TMPDIR\" \"")
+                .append(TERMUX_PREFIX).append("/var/tmp\" 2>/dev/null;")
+            append("cd \"\$HOME\" 2>/dev/null || cd /;")
+            // 就绪标记单独一行，方便上层按行判定。
+            append("printf '%s\\n' '").append(readyMarker).append("';")
+            // 关掉历史、提示符等噪音，让管道里只有我们关心的内容。
+            append("unset HISTFILE;")
+            append("PROMPT_COMMAND='';")
+            // -i 让 bash 保持交互态（不会因为 stdin 暂时空就退出），
+            // TERM=dumb 关闭 readline 的行编辑与转义序列，输出更干净。
+            append("exec bash --noprofile --norc -i")
+        }
+
+        return head + listOf("$TERMUX_PREFIX/bin/bash", "-c", script)
+    }
+
     fun buildCommand(context: Context, command: String?): List<String> {
         val pkg = context.packageName
         val rootfs = rootfsDir(context)
