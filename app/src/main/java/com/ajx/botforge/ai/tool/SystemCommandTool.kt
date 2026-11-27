@@ -51,28 +51,36 @@ object SystemCommandTool : Tool {
         )
         .put("required", org.json.JSONArray().put("cmd"))
 
-    override fun run(args: JSONObject): String {
+    override fun run(args: JSONObject): ToolResult {
         val cmd = args.optString("cmd").trim()
-        if (cmd.isEmpty()) return "错误：cmd 不能为空"
+        if (cmd.isEmpty()) return ToolResult.fail("cmd 不能为空")
 
         val ctx = App.instance
 
         // 先给出精确的状态说明，而不是让模型去猜「为什么失败」。
         // 分三种失败分别讲清楚，模型才能给出对用户有意义的提示，
         // 而不是笼统地说一句「执行失败」然后开始编。
+        // 这里用 fail() 而不是 ok()：框架侧据此判定「这次没成」，
+        // 模型随后若声称已完成就会被拦下来。
         val st = ShizukuKeepAlive.status(ctx)
         if (!st.installed) {
-            return "Shizuku 未安装，无法使用系统命令。" +
+            return ToolResult.fail(
+                "Shizuku 未安装",
                 "需要打开应用 / 改系统设置这类操作时，请告诉用户先安装 Shizuku。"
+            )
         }
         if (!st.running) {
-            return "Shizuku 已安装但服务没有运行。" +
+            return ToolResult.fail(
+                "Shizuku 已安装但服务没有运行",
                 "请告诉用户打开 Shizuku App 重新激活（多数机型需要连一次电脑或开无线调试），" +
-                "激活后本工具即可使用。这不是命令写错。"
+                    "激活后本工具即可使用。这不是命令写错。"
+            )
         }
         if (!st.granted) {
-            return "Shizuku 正在运行，但 BotForge 没有获得授权。" +
+            return ToolResult.fail(
+                "Shizuku 正在运行，但 BotForge 没有获得授权",
                 "请告诉用户在 BotForge 设置页点「请求 Shizuku 授权」并允许。"
+            )
         }
 
         Logger.i("SysCmd", "执行系统命令: ${cmd.take(120)}")
@@ -80,11 +88,17 @@ object SystemCommandTool : Tool {
             ShizukuKeepAlive.exec(cmd)
         } catch (e: Throwable) {
             Logger.w("SysCmd", "系统命令抛异常: ${e.message}")
-            return "执行出错：${e.message ?: e.javaClass.simpleName}"
+            return ToolResult.fail(
+                "执行出错：${e.message ?: e.javaClass.simpleName}"
+            )
         }
 
         val text = out.trim()
-        if (text.isEmpty()) return "（命令执行完成，没有输出；退出码可能为 0）"
-        return if (text.length > 2000) text.take(2000) + "\n…（已截断）" else text
+        if (text.isEmpty()) {
+            return ToolResult.ok("（命令执行完成，没有输出；退出码可能为 0）")
+        }
+        return ToolResult.ok(
+            if (text.length > 2000) text.take(2000) + "\n…（已截断）" else text
+        )
     }
 }

@@ -76,9 +76,9 @@ object BuiltinTools {
             )
             .put("required", JSONArray().put("cmd"))
 
-        override fun run(args: JSONObject): String {
+        override fun run(args: JSONObject): ToolResult {
             val cmd = args.optString("cmd").trim()
-            if (cmd.isEmpty()) return "错误：cmd 不能为空"
+            if (cmd.isEmpty()) return ToolResult.fail("cmd 不能为空")
             val workdir = args.optString("workdir").takeIf { it.isNotBlank() }
             val timeout = args.optInt("timeout", 120).coerceIn(5, 300).toLong()
 
@@ -86,11 +86,22 @@ object BuiltinTools {
             // 也不依赖界面上的交互式会话是否还活着。
             val r = HiddenExec.run(App.instance, cmd, timeout, workdir)
             r.error?.let { err ->
-                val out = r.output
-                return if (out.isEmpty()) "错误：$err" else "错误：$err\n\n$out"
+                // 执行器层面的失败（环境没起来、超时、shell 挂了），
+                // 与「命令跑了但退出码非 0」是两回事，要分开报。
+                return ToolResult.fail("错误：$err", r.output)
             }
-            return if (r.output.isEmpty()) "（无输出，退出码 ${r.exitCode}）"
-            else r.output
+            if (r.timedOut) {
+                return ToolResult.fail("命令超时（${timeout}s），已终止", r.output)
+            }
+            if (r.exitCode != 0) {
+                // 退出码非 0 就算失败：以前一律当成功返回，
+                // 模型拿到一段错误输出却以为执行成功了，接着往下编。
+                val body = r.output.ifEmpty { "（无输出）" }
+                return ToolResult.fail("命令退出码 ${r.exitCode}", body)
+            }
+            return ToolResult.ok(
+                if (r.output.isEmpty()) "（无输出，退出码 ${r.exitCode}）" else r.output
+            )
         }
     }
 
@@ -115,13 +126,17 @@ object BuiltinTools {
             .put("properties", JSONObject())
             .put("required", JSONArray())
 
-        override fun run(args: JSONObject): String {
+        override fun run(args: JSONObject): ToolResult {
             return try {
                 val text = TerminalEnvironment.dumpDiagnostics(App.instance)
-                "自检完成，已写入 /sdcard/Download/bf_terminal_diag.txt\n\n" +
-                    text.take(1800)
+                ToolResult.ok(
+                    "自检完成，已写入 /sdcard/Download/bf_terminal_diag.txt\n\n" +
+                        text.take(1800)
+                )
             } catch (e: Throwable) {
-                "自检失败：" + e.javaClass.simpleName + " " + (e.message ?: "")
+                ToolResult.fail(
+                    "自检失败：" + e.javaClass.simpleName + " " + (e.message ?: "")
+                )
             }
         }
     }
@@ -157,22 +172,28 @@ object BuiltinTools {
             )
             .put("required", JSONArray().put("path"))
 
-        override fun run(args: JSONObject): String {
+        override fun run(args: JSONObject): ToolResult {
             val path = args.optString("path").trim()
-            if (path.isEmpty()) return "错误：path 不能为空"
+            if (path.isEmpty()) return ToolResult.fail("path 不能为空")
             val max = args.optInt("max_chars", 8000).coerceIn(200, 40000)
             val f = File(path)
-            if (!f.exists()) return "文件不存在：$path"
-            if (f.isDirectory) return "$path 是目录，请用 run_command 的 ls"
+            if (!f.exists()) return ToolResult.fail("文件不存在：$path")
+            if (f.isDirectory) {
+                return ToolResult.fail("$path 是目录，请用 run_command 的 ls")
+            }
             if (f.length() > 2L * 1024 * 1024) {
-                return "文件太大（${f.length() / 1024} KB），请用 run_command 配合 head/sed 分段读。"
+                return ToolResult.fail(
+                    "文件太大（" + (f.length() / 1024) + " KB），请用 run_command 配合 head/sed 分段读。"
+                )
             }
             return try {
                 val text = f.readText()
-                if (text.length <= max) text
-                else text.take(max) + "\n…（已截断，原文 ${text.length} 字符）"
+                ToolResult.ok(
+                    if (text.length <= max) text
+                    else text.take(max) + "\n…（已截断，原文 ${text.length} 字符）"
+                )
             } catch (e: Exception) {
-                "读取失败：${e.message}"
+                ToolResult.fail("读取失败：${e.message}")
             }
         }
     }
@@ -214,18 +235,20 @@ object BuiltinTools {
             )
             .put("required", JSONArray().put("path").put("content"))
 
-        override fun run(args: JSONObject): String {
+        override fun run(args: JSONObject): ToolResult {
             val path = args.optString("path").trim()
-            if (path.isEmpty()) return "错误：path 不能为空"
+            if (path.isEmpty()) return ToolResult.fail("path 不能为空")
             val content = args.optString("content")
             val append = args.optBoolean("append", false)
             return try {
                 val f = File(path)
                 f.parentFile?.mkdirs()
                 if (append) f.appendText(content) else f.writeText(content)
-                "已写入 ${f.length()} 字节：$path"
+                ToolResult.ok("已写入 ${f.length()} 字节：$path")
             } catch (e: Exception) {
-                "写入失败：${e.message}（若是 /sdcard 路径，需已授予存储权限）"
+                ToolResult.fail(
+                    "写入失败：${e.message}（若是 /sdcard 路径，需已授予存储权限）"
+                )
             }
         }
     }
@@ -237,9 +260,9 @@ object BuiltinTools {
 
         override val parameters: JSONObject = noParams()
 
-        override fun run(args: JSONObject): String {
+        override fun run(args: JSONObject): ToolResult {
             val list = PluginRegistry.all()
-            if (list.isEmpty()) return "当前没有安装任何插件。"
+            if (list.isEmpty()) return ToolResult.ok("当前没有安装任何插件。")
             val sb = StringBuilder("已安装 ${list.size} 个插件：\n")
             for (p in list) {
                 sb.append("\n- ${p.name} v${p.version} (${p.id})\n")
@@ -248,7 +271,7 @@ object BuiltinTools {
                     sb.append("  指令：${c.usage} — ${c.description}\n")
                 }
             }
-            return sb.toString().trim()
+            return ToolResult.ok(sb.toString().trim())
         }
     }
 
@@ -279,22 +302,25 @@ object BuiltinTools {
             )
             .put("required", JSONArray().put("command"))
 
-        override fun run(args: JSONObject): String {
+        override fun run(args: JSONObject): ToolResult {
             val name = args.optString("command").trim().removePrefix("/")
-            if (name.isEmpty()) return "错误：command 不能为空"
+            if (name.isEmpty()) return ToolResult.fail("command 不能为空")
 
             val cmd: PluginCommand = PluginRegistry.find(name)
-                ?: return "没有名为 $name 的指令。可先调用 list_plugins 查看。"
+                ?: return ToolResult.fail("没有名为 $name 的指令", "可先调用 list_plugins 查看。")
 
             // 工具层只允许私聊安全的指令，群聊由上层拦截
-            if (!cmd.allows("c2c")) return "指令 $name 不允许以这种方式执行。"
+            if (!cmd.allows("c2c")) {
+                return ToolResult.fail("指令 $name 不允许以这种方式执行。")
+            }
 
             val argList = args.optString("args").trim()
                 .split(Regex("\\s+")).filter { it.isNotEmpty() }
 
-            val manifest = PluginRegistry.manifestOf(cmd) ?: return "插件未加载"
+            val manifest = PluginRegistry.manifestOf(cmd)
+                ?: return ToolResult.fail("插件未加载")
             val script = File(manifest.dir, cmd.entry)
-            if (!script.exists()) return "入口脚本不存在：${cmd.entry}"
+            if (!script.exists()) return ToolResult.fail("入口脚本不存在：${cmd.entry}")
 
             var proc: Process? = null
             return try {
@@ -327,16 +353,21 @@ object BuiltinTools {
 
                 if (!proc.waitFor(cmd.timeout.toLong(), TimeUnit.SECONDS)) {
                     proc.destroyForcibly()
-                    return "插件执行超时（${cmd.timeout}s），已终止"
+                    return ToolResult.fail("插件执行超时（${cmd.timeout}s），已终止")
                 }
                 reader.join(800)
                 val out = synchronized(sb) { sb.toString() }.trim()
-                if (out.isEmpty()) "（无输出）"
-                else if (out.length > MAX_OUT) out.take(MAX_OUT) + "\n…（已截断）"
-                else out
+                if (proc.exitValue() != 0) {
+                    // 插件脚本的退出码是它自己给出的成败信号，
+                    // 以前被丢掉了，模型看不到失败，就会当作成功继续往下走。
+                    return ToolResult.fail("插件退出码 ${proc.exitValue()}", out.ifEmpty { "（无输出）" })
+                }
+                if (out.isEmpty()) ToolResult.ok("（无输出）")
+                else if (out.length > MAX_OUT) ToolResult.ok(out.take(MAX_OUT) + "\n…（已截断）")
+                else ToolResult.ok(out)
             } catch (e: Exception) {
                 Logger.w("Tool", "run_plugin 失败: ${e.message}")
-                "插件执行出错：${e.message}"
+                ToolResult.fail("插件执行出错：${e.message}")
             } finally {
                 try { proc?.destroy() } catch (_: Exception) {}
             }
