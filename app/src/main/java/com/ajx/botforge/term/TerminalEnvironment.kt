@@ -133,28 +133,43 @@ object TerminalEnvironment {
         val link = File(runLibDir(context), alias)
         runCatching { link.parentFile?.mkdirs() }
 
-        // 源文件存在时才建链；否则退回原生路径，至少能试一次
+        // 源文件不存在就无从谈起，直接返回原路径
         if (!src.exists() || src.length() <= 0L) return src
-
-        // 目标 so 本身要可执行，软链接解析后继承它的权限
         runCatching { src.setExecutable(true, false) }
 
-        // 已有正确指向的链接就直接复用；否则删掉重建
-        val want = src.absolutePath
-        val cur = runCatching {
-            android.system.Os.readlink(link.absolutePath)
-        }.getOrNull()
-        if (cur == want) return link
-        runCatching { if (link.exists() || cur != null) link.delete() }
-        val ok = runCatching {
-            java.nio.file.Files.createSymbolicLink(
-                link.toPath(), src.toPath()
-            )
-            true
-        }.getOrDefault(false)
-        return if (ok) link else src
-    }
+        // 清理私有目录里的陈旧副本。
+        //
+        // 这里踩过一个非常隐蔽的坑：旧实现「已存在且长度>0 就复用」，
+        // 于是替换了包内 loader 之后，私有目录里那份 1.6KB 的残次文件
+        // 一直被沿用，装多少版都报同一个错。
+        // 现在只要不是指向当前源的软链接，就一律删除重建。
+        val st = runCatching { android.system.Os.lstat(link.absolutePath) }.getOrNull()
+        val isLink = st != null && android.system.OsConstants.S_ISLNK(st.st_mode)
+        if (st != null) {
+            val cur = if (isLink) {
+                runCatching { android.system.Os.readlink(link.absolutePath) }.getOrNull()
+            } else null
+            val stale = cur != src.absolutePath
+            if (stale) runCatching { link.delete() }
+        }
 
+        // 建一个指向 nativeLibraryDir 的软链接，作为兼容路径。
+        if (isLink && runCatching { android.system.Os.readlink(link.absolutePath) }.getOrNull() == src.absolutePath) {
+            return link
+        }
+        runCatching {
+            java.nio.file.Files.createSymbolicLink(link.toPath(), src.toPath())
+        }
+
+        // 直接返回 nativeLibraryDir 里的真实文件。
+        //
+        // 这是唯一确定可执行的路径：该目录属 apk_data_file，SELinux 为 JNI
+        // 加载专门放开了 exec。而 filesDir 属 app_data_file，exec 一律 deny
+        // —— 诊断日志里那条
+        //   Cannot run program ".../files/lib/proot": error=13, Permission denied
+        // 就是它，且 chmod 改不动。所以真正运行的必须是这一份。
+        return src
+    }
     /**
      * rootfs 落地目录。
      *
