@@ -36,9 +36,13 @@ import java.util.zip.GZIPInputStream
  */
 object TerminalEnvironment {
 
-    const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar"
+    /** Termux 用户空间的标准前缀。Termux 二进制的 RUNPATH 写死这个路径。 */
+    const val TERMUX_PREFIX = "/data/data/com.termux/files/usr"
+    /** 容器内的 home 目录。 */
+    const val TERMUX_HOME = "$TERMUX_PREFIX/home"
+    const val ASSET_ROOTFS = "rootfs/termux-rootfs.tar"
     private const val MARKER = ".bf_ready"
-    private const val ROOTFS_VERSION = "alpine-3.19.0-r6"
+    private const val ROOTFS_VERSION = "termux-bootstrap-2026.11.15"
     /** loader 的备份副本。Gradle 会按 ABI 过滤 jniLibs，纯符号文件容易被丢掉，
      *  所以 assets 里再放一份，运行期发现缺失就补回去。 */
     private const val ASSET_LOADER = "bin/libbfloader.so"
@@ -730,14 +734,26 @@ object TerminalEnvironment {
 
         val argv = mutableListOf<String>()
         argv += prootPath(context).absolutePath
-        argv += listOf("-0", "-r", rootfs.absolutePath, "--link2symlink")
+        argv += listOf("-0", "-r", rootfs.absolutePath, "--kill-on-exit")
 
-        // 绑定点必须先确认「真的能访问」再绑。
+        // ===== 完整 Termux 用户空间的关键绑定 =====
         //
-        // Operit 的 can_access_bind_source 做的是同一件事：proot 遇到不存在
-        // 或无权限的 -b 源会直接失败退出，整条命令就废了（错误还会伪装成
-        // execve 权限问题）。之前无条件绑 /data/local/tmp，而 app 域在多数
-        // 设备上访问不了它，这就是「会话启动失败」的原因之一。
+        // 这几条是真机实测出来的，缺一条整套就起不来：
+        //
+        // 1) /system /apex /vendor 必须绑。
+        //    Termux 二进制的 ELF interpreter 是 /system/bin/linker64，
+        //    不是 musl loader。rootfs 里没有 system/ 目录，不绑的话
+        //    proot 在 execve 阶段一律报 "No such file or directory"，
+        //    并提示 "the loader was not found"，极容易误判成 loader 坏了。
+        //    实测：绑定前 bash 永远起不来，绑定后立刻 ROOTFS_OK。
+        //
+        // 2) rootfs 自身要绑到 /data/data/com.termux/files/usr。
+        //    Termux 二进制的 RUNPATH 写死这个绝对路径，
+        //    bash / coreutils / apt 全部依赖它找 lib。
+        //    不绑就会出现 "library libandroid-support.so not found"。
+        //
+        // 3) 宿主侧 proot 本体靠 LD_LIBRARY_PATH（见 applyProotEnv），
+        //    容器内则靠上面的前缀绑定，两条路不能混。
         fun bind(src: String, dst: String? = null) {
             val f = File(src)
             val reachable = runCatching { f.exists() || f.canRead() }.getOrDefault(false)
@@ -748,49 +764,55 @@ object TerminalEnvironment {
                 argv += listOf("-b", "$src:$dst")
             }
         }
+
+        // 系统分区（Termux 二进制解释器与 bionic 依赖都在这）
+        bind("/system")
+        bind("/apex")
+        bind("/vendor")
+
         bind("/dev")
         bind("/proc")
         bind("/sys")
-        bind("/dev/pts")
         bind(tmp.absolutePath, "/dev/shm")
-        bind("/proc/self/fd", "/dev/fd")
-        bind("/proc/self/fd/0", "/dev/stdin")
-        bind("/proc/self/fd/1", "/dev/stdout")
-        bind("/proc/self/fd/2", "/dev/stderr")
         bind("/storage/emulated/0", "/sdcard")
         bind("/storage/emulated/0")
-        bind(dataDir, "/data/data/$pkg")
+
+        // 用户空间本体挂到 Termux 标准前缀
+        bind(rootfs.absolutePath, TERMUX_PREFIX)
+
         // 注意：这里**不能**再绑定 filesDir 与 nativeLibraryDir。
-        //
         // 一旦把私有目录绑进容器，proot 解析 PROOT_LOADER / 可执行路径时
         // 会走 guest 视图，与宿主机的真实位置错位，loader 直接失效。
-        // 诊断实证：loader 尺寸正确（18136）却依然报 loader 找不到。
-        // rootfs 内的程序本来就走 proot 的 rootfs，不需要这两条绑定。
 
-        // SELinux 下读不到真实的 /proc/stat 等文件，用 rootfs 内的空文件顶上，
-        // 否则 top / uptime 一类命令会直接报权限错误退出。
-        val fakeProc = File(rootfs, ".proc").apply { mkdirs() }
-        listOf("stat", "loadavg", "uptime", "version", "vmstat", "interrupts").forEach { f ->
-            val src = File(fakeProc, f)
-            if (!src.exists()) runCatching { src.writeText("") }
-            argv += listOf("-b", "${src.absolutePath}:/proc/$f")
+        argv += listOf("-w", TERMUX_HOME)
+        argv += listOf("$TERMUX_PREFIX/bin/bash", "-c")
+
+        val script = buildString {
+            append("export PREFIX=").append(TERMUX_PREFIX).append(';')
+            append("export PATH=").append(TERMUX_PREFIX).append("/bin;")
+            append("export LD_LIBRARY_PATH=").append(TERMUX_PREFIX).append("/lib;")
+            append("export HOME=").append(TERMUX_HOME).append(';')
+            append("export TMPDIR=").append(TERMUX_PREFIX).append("/tmp;")
+            append("export TERM=xterm-256color;")
+            append("export LANG=C.UTF-8;")
+            append("export PROOT_NO_SECCOMP=1;")
+            append("mkdir -p \"\$HOME\" \"\$TMPDIR\" \"")
+                .append(TERMUX_PREFIX).append("/var/tmp\" 2>/dev/null;")
+            append("cd \"\$HOME\" 2>/dev/null || cd /;")
+            if (command != null) {
+                // 用 exec 让命令直接接管进程，信号能透传（Ctrl+C 才能杀得掉）
+                append("exec bash -lc ").append(shellQuote(command))
+            } else {
+                append("exec bash -l")
+            }
         }
-
-        argv += listOf("-w", "/root")
-        argv += "/usr/bin/env"
-        argv += listOf(
-            "-i",
-            "HOME=/root",
-            "TERM=xterm-256color",
-            "LANG=en_US.UTF-8",
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            "PROOT_NO_SECCOMP=1",
-            "PROOT_TMP_DIR=${tmp.absolutePath}",
-            "LD_LIBRARY_PATH=${runLibDir(context).absolutePath}:${lib.absolutePath}"
-        )
-        argv += if (command != null) listOf("/bin/sh", "-lc", command) else listOf("/bin/sh", "-l")
+        argv += script
         return argv
     }
+
+    /** 单引号包裹，内部单引号转义，保证命令原样传给 bash。 */
+    private fun shellQuote(s: String): String = "'" + s.replace("'", "'\\''") + "'"
+
 
     /** 非交互执行一条命令，返回合并后的输出。交互式终端走 TerminalSession。 */
     fun exec(context: Context, command: String, timeoutSec: Long = 60): ExecResult {
