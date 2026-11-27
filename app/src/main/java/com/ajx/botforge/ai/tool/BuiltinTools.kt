@@ -20,6 +20,7 @@ object BuiltinTools {
 
     fun all(): List<Tool> = listOf(
         RunCommandTool,
+        SystemCommandTool,
         DiagnoseTerminalTool,
         ReadFileTool,
         WriteFileTool,

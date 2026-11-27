@@ -11,8 +11,8 @@ android {
         applicationId "com.ajx.botforge"
         minSdk 26
         targetSdk 34
-        versionCode 44
-        versionName "1.8.6"
+        versionCode 45
+        versionName "1.8.7"
 
         // 内置 proot 只有 aarch64 版本，其他 ABI 装上也跑不了终端，
         // 直接限定 arm64-v8a，减少包体。
