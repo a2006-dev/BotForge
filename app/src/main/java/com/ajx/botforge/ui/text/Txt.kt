@@ -112,7 +112,6 @@ object Txt {
     const val AUTH_SCOPE_GROUP = "限群"
 
     // ---------------------------------------------------------------- 权限页
-    const val TITLE_PERMISSIONS = "权限"
     const val PERM_SUB_OWNER = "主人与管理员"
     /** 验证码区标题 */
     const val PERM_CODE_TITLE = "绑定验证码"
