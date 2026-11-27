@@ -73,8 +73,8 @@ object TerminalEnvironment {
      * @return 所需运行库是否齐备
      */
     fun ensureRunLibs(context: Context): Boolean {
-        // 私有目录里的 proot 与 loader 必须可执行，否则 proot 一启动
-        // 就报 execve Permission denied（错误信息会误指向 /usr/bin/env）。
+        // proot 与 loader 是指向 nativeLibraryDir 的软链接，本体已可执行；
+        // 这里再 chmod 一次是兜底，避免某些 ROM 上 so 权限被重置。
         runCatching { ensureProot(context).setExecutable(true, false) }
         runCatching { ensureLoader(context).setExecutable(true, false) }
         val src = libDir(context)
@@ -101,30 +101,58 @@ object TerminalEnvironment {
     fun prootPath(context: Context): File = ensureProot(context)
 
     /**
-     * 把 proot 本体也复制到私有目录再执行。
+     * proot 本体。
      *
-     * data/app/.../lib/arm64/libbfproot.so 在当前设备上可以直接 exec，
-     * 但不同 ROM 的 SELinux 策略并不一致（Operit 也是先把 proot 链接到
-     * filesDir 下的 bin 目录再跑）。统一放私有目录可以避开这类差异，
-     * 代价只是多占 250KB。
+     * 与 loader 一样只能软链到 nativeLibraryDir —— 直接执行那里的
+     * libbfproot.so 是合法的，复制到 filesDir 反而会被 SELinux 拒绝。
      */
     fun ensureProot(context: Context): File {
-        val target = File(runLibDir(context), "proot")
-        if (target.exists() && target.length() > 0) {
-            runCatching { target.setExecutable(true, false) }
-            return target
-        }
-        runCatching {
-            target.parentFile?.mkdirs()
-            val from = File(libDir(context), "libbfproot.so")
-            if (from.exists() && from.length() > 0) {
-                from.copyTo(target, overwrite = true)
-                target.setExecutable(true, false)
-            }
-        }
-        // 复制失败就退回包内路径，至少还能试一次
-        val fallback = File(libDir(context), "libbfproot.so")
-        return if (target.exists()) target else fallback
+        return linkIntoBin(context, "libbfproot.so", "proot")
+    }
+
+    /**
+     * 把一个位于 nativeLibraryDir 的 so 链接到私有目录，返回**软链接**的路径。
+     *
+     * ## 为什么不复制
+     *
+     * 这是踩过最深的坑。早期把 proot / loader 复制到 filesDir 再 setExecutable，
+     * 看起来权限是 755，但一执行就 Permission denied：
+     *
+     * - `filesDir` 属于 SELinux 的 `app_data_file`，**exec 一律被 deny**，
+     *   这是 Android 10 起对 data 分区施加的 W^X 策略，chmod 改不动；
+     * - `data/app/<pkg>/lib/arm64` 属于 `apk_data_file`，是系统为 JNI
+     *   加载专门开放的可执行路径。
+     *
+     * 所以正确做法与 Operit 一致：二进制**留在** nativeLibraryDir，
+     * 只在私有目录建一个指向它的软链接。软链接本身不需要 exec 权限，
+     * 解析后落在被允许的路径上即可执行。
+     */
+    private fun linkIntoBin(context: Context, libName: String, alias: String): File {
+        val nativeDir = File(context.applicationInfo.nativeLibraryDir)
+        val src = File(nativeDir, libName)
+        val link = File(runLibDir(context), alias)
+        runCatching { link.parentFile?.mkdirs() }
+
+        // 源文件存在时才建链；否则退回原生路径，至少能试一次
+        if (!src.exists() || src.length() <= 0L) return src
+
+        // 目标 so 本身要可执行，软链接解析后继承它的权限
+        runCatching { src.setExecutable(true, false) }
+
+        // 已有正确指向的链接就直接复用；否则删掉重建
+        val want = src.absolutePath
+        val cur = runCatching {
+            android.system.Os.readlink(link.absolutePath)
+        }.getOrNull()
+        if (cur == want) return link
+        runCatching { if (link.exists() || cur != null) link.delete() }
+        val ok = runCatching {
+            java.nio.file.Files.createSymbolicLink(
+                link.toPath(), src.toPath()
+            )
+            true
+        }.getOrDefault(false)
+        return if (ok) link else src
     }
 
     /**
@@ -138,8 +166,10 @@ object TerminalEnvironment {
      * busybox 的软链接，创建全部失败；退化成复制实体文件时，
      * 目标文件往往还没解出来，一样失败。
      *
-     * 内部存储是 f2fs，支持软链接，且实测 proot 在其中可以正常
-     * exec guest 程序。Config.termUseExternal 已废弃，保留只为兼容旧数据。
+     * 内部存储是 f2fs，支持软链接，根文件系统必须放这里。
+     * 注意：rootfs 内的程序由 proot + loader 接管执行，与 filesDir
+     * 本身是否允许 exec 无关（loader 与 proot 走 nativeLibraryDir）。
+     * Config.termUseExternal 已废弃，保留只为兼容旧数据。
      */
     fun rootfsDir(context: Context): File = File(context.filesDir, "rootfs")
 
@@ -180,8 +210,8 @@ object TerminalEnvironment {
         val dir = libDir(context)
         // 包内只会有 libtalloc.so；libtalloc.so.2 由 ensureRunLibs 在首次启动时生成。
         // loader 缺了 proot 只能启动不能执行任何 guest 程序，必须一起检查
-        // ensureLoader 会把 loader 复制到私有目录并 chmod +x，
-        // 这里检查的是复制后的那份（包内 lib 目录 app 域无 exec 权限）。
+        // ensureLoader 返回指向 nativeLibraryDir 的软链接，
+        // exists() 会跟随链接，因此这里能真实反映 loader 是否可用。
         return File(dir, "libbfproot.so").exists() &&
             File(dir, "libtalloc.so").exists() &&
             ensureLoader(context).exists()
@@ -449,39 +479,10 @@ object TerminalEnvironment {
      * proot 在容器内 exec 一律 Permission denied。这里做兜底自愈。
      */
     fun ensureLoader(context: Context): File {
-        // loader 必须落在 App 私有目录，不能直接用 data/app/.../lib/arm64 里那份。
-        //
-        // 这是 Operit 的做法（LocalTerminalProvider.buildEnvironment 把
-        // PROOT_LOADER 指向 filesDir/usr/bin/loader，该文件由
-        // liboperit_loader.so 软链接而来，链接前先 setExecutable）：
-        // android app 域对 data/app/.../lib 下的 so **只有读权限、没有 exec
-        // 权限**，而 proot 需要把 loader 映射进 guest 进程去接管 execve，
-        // 于是 SELinux 直接拒绝，proot 只能报一句含糊的
-        //   execve("/usr/bin/env"): Permission denied
-        //   * the loader was not found or doesn't work.
-        // 放到私有目录后 exec 权限正常，loader 才能真正生效。
-        val target = File(runLibDir(context), "libbfloader.so")
-        if (target.exists() && target.length() > 0) {
-            runCatching { target.setExecutable(true, false) }
-            return target
-        }
-        runCatching {
-            target.parentFile?.mkdirs()
-            // 优先用包内 lib 目录的同一份二进制，缺失时退回 assets
-            val fromLib = File(libDir(context), "libbfloader.so")
-            if (fromLib.exists() && fromLib.length() > 0) {
-                fromLib.copyTo(target, overwrite = true)
-            } else {
-                context.assets.open(ASSET_LOADER).use { input ->
-                    FileOutputStream(target).use { out -> input.copyTo(out) }
-                }
-            }
-            target.setExecutable(true, false)
-            Logger.i("TerminalEnvironment", "loader 已就位: " + target.absolutePath)
-        }
-        return target
+        // loader 是 proot 接管 guest execve 的关键，必须位于可执行路径。
+        // 见 linkIntoBin 的说明：只能软链到 nativeLibraryDir，不能复制。
+        return linkIntoBin(context, "libbfloader.so", "loader")
     }
-
     /**
      * 一次性把 proot 所需的环境变量灌进去。
      *
