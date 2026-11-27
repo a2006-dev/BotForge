@@ -394,26 +394,32 @@ object TerminalEnvironment {
             // 解包收尾必须核对产物：曾出现 tar 提前读完、MARKER 照写、
             // 结果 rootfs 残缺，proot 一 exec 就 Permission denied 的情况。
             // 这里做硬校验，不达标就当失败，下次启动会重新解包。
-            val expectEnv = File(dest, "usr/bin/env")
+            // Termux bootstrap 的布局与 Alpine 完全不同，校验标准必须跟着换：
+            //   * env 在 /bin/env（软链到 coreutils），不在 usr/bin
+            //   * 没有 busybox，基础命令走 coreutils
+            //   * 没有 usr/bin 这一层，usr-merge 到 /bin
+            // 之前沿用 Alpine 的三项检查，导致解包明明是好的
+            // （bin=400、软链接失败=0），却被判成「解包不完整」拦在门外。
+            val expectEnv = File(dest, "bin/env")
             val expectSh = File(dest, "bin/sh")
-            val expectBox = File(dest, "bin/busybox")
+            val expectBash = File(dest, "bin/bash")
+            val expectProot = File(dest, "bin/proot")
             val binCount = File(dest, "bin").list()?.size ?: 0
-            val usrBinCount = File(dest, "usr/bin").list()?.size ?: 0
             val envOk = linkOk(expectEnv)
             val shOk = linkOk(expectSh)
-            val boxOk = linkOk(expectBox)
-            if (!envOk || !shOk || !boxOk ||
-                binCount < 5 || usrBinCount < 50
+            val bashOk = expectBash.length() > 100_000L
+            val prootOk = expectProot.length() > 100_000L
+            if (!envOk || !shOk || !bashOk || !prootOk || binCount < 50
             ) {
                 state = State.Failed(
-                    "rootfs 解包不完整（bin=$binCount usr/bin=$usrBinCount " +
-                        "env=$envOk sh=$shOk box=$boxOk " +
+                    "rootfs 解包不完整（bin=$binCount " +
+                        "env=$envOk sh=$shOk bash=$bashOk proot=$prootOk " +
                         "links=$count 软链接失败=$linkFallbacks 复制失败=$linkCopiesFailed）"
                 )
                 return false
             }
             // 软链接降级成实体复制时，目标文件必须可执行，否则 proot 依然起不来
-            listOf(expectEnv, expectSh, expectBox).forEach { f ->
+            listOf(expectEnv, expectSh, expectBash, expectProot).forEach { f ->
                 if (f.exists() && !f.canExecute()) runCatching { f.setExecutable(true, false) }
             }
 
@@ -496,9 +502,13 @@ object TerminalEnvironment {
     }
 
     private fun hasCoreFiles(root: File): Boolean {
-        val env = File(root, "usr/bin/env")
+        // Termux 布局：env/sh 都在 /bin，bash 与 proot 是必须存在的实体。
+        val env = File(root, "bin/env")
         val sh = File(root, "bin/sh")
-        return linkOk(env) && linkOk(sh)
+        val bash = File(root, "bin/bash")
+        val proot = File(root, "bin/proot")
+        return linkOk(env) && linkOk(sh) &&
+            bash.length() > 100_000L && proot.length() > 100_000L
     }
 
     /**
@@ -561,20 +571,21 @@ object TerminalEnvironment {
         line("rootfsExists", root.exists())
         line("markerExists", File(root, MARKER).exists())
         line("markerContent", runCatching { File(root, MARKER).readText() }.getOrNull())
-        line("usrEnvExists", File(root, "usr/bin/env").exists())
+        // 诊断字段按 Termux 布局输出。之前查的是 Alpine 的
+        // usr/bin/env、bin/busybox、ld-musl-*，在 Termux 下必然全是 false，
+        // 会把人往「解包坏了」的方向带偏。
+        line("binEnvExists", File(root, "bin/env").exists())
         line("binShExists", File(root, "bin/sh").exists())
-        line("binBusyboxExists", File(root, "bin/busybox").exists())
-        line("usrEnvCanExec", File(root, "usr/bin/env").canExecute())
-        line("libMushExists", File(root, "lib/ld-musl-aarch64.so.1").exists())
-
-        line("rootToplevel", runCatching { root.list()?.size ?: -1 }.getOrDefault(-2))
+        line("binBashExists", File(root, "bin/bash").exists())
+        line("binProotExists", File(root, "bin/proot").exists())
+        line("binBashLength", File(root, "bin/bash").length())
+        line("binProotLength", File(root, "bin/proot").length())
+        line("libTallocExists", File(root, "lib/libtalloc.so.2").exists())
+        line("libAndroidShmemExists", File(root, "lib/libandroid-shmem.so").exists())
+        line("prootLoaderExists", File(root, "libexec/proot/loader").exists())
         line("binCount", runCatching { File(root, "bin").list()?.size ?: -1 }.getOrDefault(-2))
-        line("usrBinCount", runCatching { File(root, "usr/bin").list()?.size ?: -1 }.getOrDefault(-2))
-
-        val envF = File(root, "usr/bin/env")
-        line("usrEnvIsSymlink", runCatching { java.nio.file.Files.isSymbolicLink(envF.toPath()) }.getOrDefault(false))
-        line("usrEnvLinkTarget", runCatching { java.nio.file.Files.readSymbolicLink(envF.toPath()).toString() }.getOrNull())
-        line("usrEnvLength", if (envF.exists()) envF.length() else -1L)
+        val envF = File(root, "bin/env")
+        line("binEnvLength", if (envF.exists()) envF.length() else -1L)
 
         // 探测 filesDir 下能否 exec。
         //
