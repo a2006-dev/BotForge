@@ -107,7 +107,12 @@ object TerminalEnvironment {
      * libbfproot.so 是合法的，复制到 filesDir 反而会被 SELinux 拒绝。
      */
     fun ensureProot(context: Context): File {
-        return linkIntoBin(context, "libbfproot.so", "proot")
+        // 与 loader 保持一致：直接返回 nativeLibraryDir 里的真实文件。
+        // 私有目录那份软链接仍会建（供诊断/兼容），但真正执行的是这一份，
+        // 这样可执行路径与 PROOT_LOADER 处在同一目录，不会出现
+        // 「本体在 filesDir、loader 在 data/app」的路径错位。
+        runCatching { linkIntoBin(context, "libbfproot.so", "proot") }
+        return File(context.applicationInfo.nativeLibraryDir, "libbfproot.so")
     }
 
     /**
@@ -494,9 +499,18 @@ object TerminalEnvironment {
      * proot 在容器内 exec 一律 Permission denied。这里做兜底自愈。
      */
     fun ensureLoader(context: Context): File {
-        // loader 是 proot 接管 guest execve 的关键，必须位于可执行路径。
-        // 见 linkIntoBin 的说明：只能软链到 nativeLibraryDir，不能复制。
-        return linkIntoBin(context, "libbfloader.so", "loader")
+        // loader 是 proot 接管 guest execve 的关键。
+        //
+        // 必须返回 **nativeLibraryDir 里的真实路径**，不能返回私有目录的软链接。
+        // 原因：proot 拿到 PROOT_LOADER 后会自己按 guest 路径解析它，
+        // 而 filesDir 被 -b 绑进了容器，同一个绝对路径在宿主机与 guest 里
+        // 指向不同位置，loader 就找不到了 —— 表现正是那句
+        //   execve("/usr/bin/env"): Permission denied
+        //   * the loader was not found or doesn't work.
+        // 真机诊断：loaderLength 已经是正确的 18136，仍然失败，可见问题
+        // 不在文件本身，而在传入的路径被重映射。
+        runCatching { linkIntoBin(context, "libbfloader.so", "loader") }
+        return File(context.applicationInfo.nativeLibraryDir, "libbfloader.so")
     }
     /**
      * 一次性把 proot 所需的环境变量灌进去。
@@ -672,8 +686,12 @@ object TerminalEnvironment {
         bind("/storage/emulated/0", "/sdcard")
         bind("/storage/emulated/0")
         bind(dataDir, "/data/data/$pkg")
-        bind(context.filesDir.absolutePath)
-        bind(lib.absolutePath)
+        // 注意：这里**不能**再绑定 filesDir 与 nativeLibraryDir。
+        //
+        // 一旦把私有目录绑进容器，proot 解析 PROOT_LOADER / 可执行路径时
+        // 会走 guest 视图，与宿主机的真实位置错位，loader 直接失效。
+        // 诊断实证：loader 尺寸正确（18136）却依然报 loader 找不到。
+        // rootfs 内的程序本来就走 proot 的 rootfs，不需要这两条绑定。
 
         // SELinux 下读不到真实的 /proc/stat 等文件，用 rootfs 内的空文件顶上，
         // 否则 top / uptime 一类命令会直接报权限错误退出。
