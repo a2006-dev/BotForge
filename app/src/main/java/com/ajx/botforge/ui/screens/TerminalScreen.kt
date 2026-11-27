@@ -90,6 +90,10 @@ fun TerminalScreen(onBack: () -> Unit) {
     }
     // 用户已选过「跳过」却想在原页面继续装时，需要一个能重新打开选择页的入口。
     var rechoose by remember { mutableStateOf(false) }
+    // 「跳过」真正的语义是：不要容器，直接用 Android 本机的 sh。
+    // 以前跳过只是把 termMode 写成 2，页面仍停在「未就绪」分支，
+    // 于是用户点完看不出任何变化——像是按钮坏了。
+    var skipped by remember { mutableStateOf(com.ajx.botforge.data.Config.termMode == 2) }
 
     // ---------- 会话 ----------
     var session by remember { mutableStateOf<TerminalSession?>(null) }
@@ -233,6 +237,7 @@ fun TerminalScreen(onBack: () -> Unit) {
                     com.ajx.botforge.data.Config.termChosen = true
                     showChooser = false
                     rechoose = false
+                    skipped = true
                 }
             )
             // ---------- 解包中：进度优先显示 ----------
@@ -269,6 +274,30 @@ fun TerminalScreen(onBack: () -> Unit) {
                     )
                 }
             }
+            // ---------- 已跳过：直接给本机终端，不再纠缠容器 ----------
+            skipped -> Column(modifier = Modifier.fillMaxSize()) {
+                AppCard(bordered = true) {
+                    Text(
+                        text = Txt.TERM_SKIPPED_TITLE,
+                        color = c.textHigh,
+                        fontSize = FontSize.body
+                    )
+                    Text(
+                        text = Txt.TERM_SKIPPED_DESC,
+                        color = c.textMid,
+                        fontSize = FontSize.small,
+                        modifier = Modifier.padding(top = Spacing.sm)
+                    )
+                    SecondaryButton(
+                        text = Txt.TERM_INSTALL,
+                        onClick = {
+                            skipped = false
+                            rechoose = true
+                        },
+                        modifier = Modifier.padding(top = Spacing.md)
+                    )
+                }
+            }
             // ---------- 未就绪：说明原因，并且永远给出可点的下一步 ----------
             // 以前 failure 是个死胡同：只把文字摆出来，没有任何按钮，
             // 而它又排在「解包中」前面，于是点「安装」看不出任何反应。
@@ -301,6 +330,7 @@ fun TerminalScreen(onBack: () -> Unit) {
                             com.ajx.botforge.data.Config.termChosen = true
                             showChooser = false
                             rechoose = false
+                            skipped = false
                             unpack()
                         },
                         modifier = Modifier.weight(1f)
@@ -313,6 +343,7 @@ fun TerminalScreen(onBack: () -> Unit) {
                             showChooser = false
                             rechoose = false
                             failure = null
+                            skipped = true
                         },
                         modifier = Modifier.weight(1f)
                     )

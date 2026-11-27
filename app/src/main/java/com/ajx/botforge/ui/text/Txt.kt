@@ -436,6 +436,11 @@ object Txt {
 
     const val TERM_SKIP = "跳过"
 
+    const val TERM_SKIPPED_TITLE = "当前使用 Android 本机环境"
+
+    const val TERM_SKIPPED_DESC = "未安装 Alpine 容器。机器人执行终端命令时只在本机 sh 中运行，" +
+        "可以使用 ls、cat、pm、am 等系统命令，但没有 python3、apk、git 这类 Linux 工具。"
+
     /** 会话启动失败 */
     const val TERM_START_FAILED = "会话启动失败"
 

@@ -290,12 +290,15 @@ object TerminalEnvironment {
             val expectBox = File(dest, "bin/busybox")
             val binCount = File(dest, "bin").list()?.size ?: 0
             val usrBinCount = File(dest, "usr/bin").list()?.size ?: 0
-            if (!expectEnv.exists() || !expectSh.exists() || !expectBox.exists() ||
+            val envOk = linkOk(expectEnv)
+            val shOk = linkOk(expectSh)
+            val boxOk = linkOk(expectBox)
+            if (!envOk || !shOk || !boxOk ||
                 binCount < 5 || usrBinCount < 50
             ) {
                 state = State.Failed(
                     "rootfs 解包不完整（bin=$binCount usr/bin=$usrBinCount " +
-                        "env=${expectEnv.exists()} sh=${expectSh.exists()} box=${expectBox.exists()} " +
+                        "env=$envOk sh=$shOk box=$boxOk " +
                         "links=$count 软链接失败=$linkFallbacks 复制失败=$linkCopiesFailed）"
                 )
                 return false
@@ -359,10 +362,34 @@ object TerminalEnvironment {
      * 与其让模型拿到「Permission denied」这种看不出来源的错误，
      * 不如在这里直接判定环境不完整并触发重建。
      */
+    /**
+     * 判断 rootfs 里的一个条目「存在」，且**不跟随软链接**。
+     *
+     * 为什么不能直接用 File.exists()：Alpine 的 usr/bin/env、bin/sh 等都是
+     * 指向 /bin/busybox 的**绝对路径软链接**。File.exists() 会跟随链接去
+     * 找宿主机的 /bin/busybox —— 那当然不存在，于是明明解包 528 个条目
+     * 全部成功、软链接失败 0 个，校验仍然报 env=false sh=false。
+     *
+     * 这里先用 Os.lstat 看条目本身在不在（lstat 不跟随链接），
+     * 拿不到时再退回 canRead / exists 兜底。
+     */
+    fun linkOk(f: File): Boolean {
+        // Os.lstat 在路径不存在时会抛 ErrnoException，所以必须 try/catch；
+        // 能正常返回就意味着「条目本身存在」（不跟随链接）。
+        val viaLstat = runCatching {
+            android.system.Os.lstat(f.absolutePath)
+            true
+        }.getOrDefault(false)
+        if (viaLstat) return true
+        // 兜底：能列出父目录且名字在列表里，同样说明条目存在。
+        return runCatching { f.parentFile?.list()?.contains(f.name) == true }
+            .getOrDefault(false) || f.exists()
+    }
+
     private fun hasCoreFiles(root: File): Boolean {
         val env = File(root, "usr/bin/env")
         val sh = File(root, "bin/sh")
-        return env.exists() && sh.exists()
+        return linkOk(env) && linkOk(sh)
     }
 
     /**
