@@ -117,18 +117,13 @@ class EnvelopeTest {
     }
     @Test
     fun `parse 剥掉就绪标记`() {
-        // 真实管道里，就绪标记与首条命令的输出可能粘在同一段里：
-        //   __BF_READY__
-__BF_BEGIN__:tok
-<输出>
-__BF_END__:tok:0
-        // parse 会把 READY_MARKER 替换成空串，留下的空行由裁剪逻辑吃掉。
+        // 真实管道里，就绪标记会与首条命令的输出粘在同一段里。
+        // parse 把 READY_MARKER 替换成空串，原位留下一行空行，
+        // 由折叠逻辑压掉，不能喂给模型。
         val raw = "${Envelope.READY_MARKER}\npkg unpacking...\n" +
             "__BF_END__:$token:0\n"
         val p = Envelope.parse(raw, token)
         assertFalse("ready 标记残留", p.output.contains(Envelope.READY_MARKER))
-        // READY 被替换后会在原位置留一个空行，裁剪只处理首尾，
-        // 所以中间的空行保留是预期行为。
         assertEquals("pkg unpacking...", p.output)
     }
 
