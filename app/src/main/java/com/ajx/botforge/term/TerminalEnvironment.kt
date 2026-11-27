@@ -770,6 +770,45 @@ object TerminalEnvironment {
         env["TERM"] = "dumb"
     }
 
+    /**
+     * 构造 PTY 子进程要用的环境变量。
+     *
+     * 和 applyProotEnv 的区别：那个是给宿主机侧的 proot 进程用的（需要
+     * LD_LIBRARY_PATH 指向 nativeLibraryDir、PROOT_LOADER 等），这里则是
+     * 直接从 proot 启动一个 guest 程序，环境得按容器内视角给。
+     *
+     * forkpty 的子进程会完全替换掉父进程环境，所以这里必须把 PATH、
+     * HOME、PREFIX 这类基础变量都显式列全，少一个就会出现
+     * 「python3: command not found」这种看似离奇的现象。
+     */
+    fun buildPtyEnvironment(context: Context): Map<String, String> {
+        val rootfs = rootfsDir(context)
+        val lib = libDir(context)
+        val runLib = runLibDir(context)
+        val tmp = tmpDir(context)
+        val env = LinkedHashMap<String, String>()
+
+        // proot 本体在宿主侧运行，靠这两个变量找到 loader 与补名后的库。
+        // loader 走 nativeLibraryDir，proot 由 forkpty 直接 execve，
+        // 所以 LD_LIBRARY_PATH 必须同时覆盖私有运行库与 nativeLibraryDir。
+        env["PROOT_LOADER"] = File(lib, "libbfloader.so").absolutePath
+        env["PROOT_TMP_DIR"] = tmp.absolutePath
+        env["PROOT_NO_SECCOMP"] = "1"
+        env["LD_LIBRARY_PATH"] = "${runLib.absolutePath}:${lib.absolutePath}"
+
+        // 宿主侧基础环境
+        env["PATH"] = "/system/bin:/system/xbin:/vendor/bin:/sbin:/bin"
+        env["HOME"] = context.filesDir.absolutePath
+        env["TMPDIR"] = tmp.absolutePath
+        // 交给 proot 执行的程序是 guest 内的 bash，终端类型必须给对，
+        // 否则 readline 不会输出彩色提示符，方向键也会变成转义字符。
+        env["TERM"] = "xterm-256color"
+
+        // rootfs 位置供命令构造使用（不是给子进程直接读的，但保留便于排查）
+        env["BF_ROOTFS"] = rootfs.absolutePath
+        return env
+    }
+
     // 关掉 rootfs 自带的 bootstrap 第二阶段 fallback。
     // 那个 profile.d 脚本用 `second-stage.sh || exit $?`，第二阶段返回值
     // 非 0 时会把正在启动的交互 shell 一起结束，而且来不及删掉自己，

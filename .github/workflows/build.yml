@@ -28,6 +28,13 @@ jobs:
           ls "$ANDROID_SDK_ROOT" || true
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
+      - name: Setup NDK
+        run: |
+          # libbfpty.so 需要 NDK 里的 clang 与 cmake 工具链。
+          # runner 自带 SDK，直接装对应版本的 ndk 与 cmake 即可。
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;26.1.10909125" "cmake;3.22.1"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
