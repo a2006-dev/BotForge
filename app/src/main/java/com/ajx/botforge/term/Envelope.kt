@@ -83,10 +83,18 @@ object Envelope {
         out = endRegex.replace(out, "")
         out = out.replace(READY_MARKER, "")
 
+        // 剥标记时会留下空行（比如 READY_MARKER 被替换成空串，原位空一行），
+        // 这里统一把**连续的空行压成一个**，并裁掉首尾空行。
+        // 不能只做首尾裁剪：信封之间的空行会留在输出中间喂给模型。
         val cleaned = out
             .replace("\r\n", "\n")
             .replace('\r', '\n')
             .lines()
+            .fold(mutableListOf<String>()) { acc, line ->
+                if (line.isBlank() && acc.lastOrNull()?.isBlank() == true) acc
+                else acc.add(line)
+                acc
+            }
             .dropWhile { it.isBlank() }
             .dropLastWhile { it.isBlank() }
             .joinToString("\n")

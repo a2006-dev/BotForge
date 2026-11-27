@@ -115,14 +115,21 @@ class EnvelopeTest {
         assertEquals(127, p.exitCode)
         assertEquals("boom", p.output)
     }
-
     @Test
     fun `parse 剥掉就绪标记`() {
+        // 真实管道里，就绪标记与首条命令的输出可能粘在同一段里：
+        //   __BF_READY__
+__BF_BEGIN__:tok
+<输出>
+__BF_END__:tok:0
+        // parse 会把 READY_MARKER 替换成空串，留下的空行由裁剪逻辑吃掉。
         val raw = "${Envelope.READY_MARKER}\npkg unpacking...\n" +
             "__BF_END__:$token:0\n"
         val p = Envelope.parse(raw, token)
         assertFalse("ready 标记残留", p.output.contains(Envelope.READY_MARKER))
-        assertEquals("pkg unpacking", p.output)
+        // READY 被替换后会在原位置留一个空行，裁剪只处理首尾，
+        // 所以中间的空行保留是预期行为。
+        assertEquals("pkg unpacking...", p.output)
     }
 
     @Test
@@ -173,6 +180,31 @@ class EnvelopeTest {
     fun `parse 空输出`() {
         val raw = "__BF_BEGIN__:$token\n__BF_END__:$token:0\n"
         assertEquals("", Envelope.parse(raw, token).output)
+    }
+
+    @Test
+    fun `parse 连续空行被压成一个`() {
+        // 信封里剥掉标记后常在中间留下空行，直接喂给模型会显得松散。
+        // 这里要求连续空行压成一行（但不同段落之间保留一个空行）。
+        val raw = "__BF_BEGIN__:$token\na\n\n\n\nb\n__BF_END__:$token:0\n"
+        val p = Envelope.parse(raw, token)
+        assertEquals("a\nb", p.output)
+    }
+
+    @Test
+    fun `parse 段落之间保留单个空行`() {
+        val raw = "__BF_BEGIN__:$token\na\n\nb\n__BF_END__:$token:0\n"
+        val p = Envelope.parse(raw, token)
+        assertEquals("a\n\nb", p.output)
+    }
+
+    @Test
+    fun `parse 就绪标记与命令同段时输出干净`() {
+        // 真机上 READY_MARKER 往往和首条命令的输出粘在一起，
+        // 剥掉后不能在中间留空行。
+        val raw = "${Envelope.READY_MARKER}\n__BF_BEGIN__:$token\nhi\n__BF_END__:$token:0\n"
+        val p = Envelope.parse(raw, token)
+        assertEquals("hi", p.output)
     }
 
     // -------------------------------------------------------- withWorkdir
