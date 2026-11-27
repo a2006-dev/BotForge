@@ -803,13 +803,18 @@ object TerminalEnvironment {
         // 解法：在 rootfs 内自备一份合法的 ld.config.txt。
         // proot 把 rootfs 当 /，linker 读到它就不再报警，
         // id -u 输出恢复成干净的数字。实测警告完全消失。
+        //
+        // 注意：这里**不要**再 bind("/linkerconfig")。
+        // 宿主机那个目录对 app 域是 Permission denied，
+        // 但 File.exists() 会返回 true，绕过 bind() 的可达性检查，
+        // 于是 proot 真去 bind 时被 SELinux 拒绝，启动即为：
+        //   proot warning: can't sanitize binding "/linkerconfig": Permission denied
+        // 然后会话起不来。rootfs 内自带的那份已经完全够用。
         val linkerCfg = File(rootfs, "linkerconfig").apply { mkdirs() }
         val ldConfig = File(linkerCfg, "ld.config.txt")
         if (!ldConfig.exists() || ldConfig.length() == 0L) {
             runCatching { ldConfig.writeText("[section foo]\n") }
         }
-
-        bind("/linkerconfig")
 
         bind("/dev")
         bind("/proc")
