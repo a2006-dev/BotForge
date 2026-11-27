@@ -104,6 +104,10 @@ object TerminalEnvironment {
     }
 
     fun isReady(context: Context): Boolean {
+        // 运行库补齐必须先于就绪判断：rootfs 已解包但私有库里还没有
+        // libtalloc.so.2 时，proot 会在 exec 阶段直接链接失败。
+        // 放在这里可以让每次启动都自动修复，无需用户重装或清数据。
+        ensureRunLibs(context)
         val marker = File(rootfsDir(context), MARKER)
         if (!marker.exists()) return false
         return runCatching { marker.readText().trim() == ROOTFS_VERSION }.getOrDefault(false)
@@ -267,6 +271,12 @@ object TerminalEnvironment {
             pb.directory(context.filesDir)
             pb.redirectErrorStream(true)
             pb.environment().clear()
+            // 与 TerminalSession 同理：proot 自身加载就需要 libtalloc.so.2，
+            // 这里的库路径必须包含补好 soname 的私有目录。
+            pb.environment()["LD_LIBRARY_PATH"] = listOf(
+                runLibDir(context).absolutePath,
+                libDir(context).absolutePath
+            ).joinToString(":")
             pb.environment()["PROOT_TMP_DIR"] = tmpDir(context).absolutePath
             val proc = pb.start()
             val output = StringBuilder()

@@ -270,7 +270,9 @@ fun DashboardScreen(
                     onOpenModels = onOpenModels,
                     onOpenPlugins = onOpenPlugins,
                     onOpenTerminal = onOpenTerminal,
-                                        onOpenTools = onOpenTools,
+                    onOpenTools = onOpenTools,
+                    onOpenPermissions = onOpenPermissions,
+                    onOpenAbout = onOpenAbout,
                     onOpenSettings = onOpenSettings
                 )
             }
@@ -624,6 +626,8 @@ private fun QuickLinks(
     onOpenPlugins: () -> Unit,
     onOpenTerminal: () -> Unit,
     onOpenTools: () -> Unit,
+    onOpenPermissions: () -> Unit,
+    onOpenAbout: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val c = botColors
@@ -642,6 +646,10 @@ private fun QuickLinks(
         QuickRow(Txt.LINK_TERMINAL, Txt.LINK_TERMINAL_DESC, onOpenTerminal)
         QuickDivider()
         QuickRow(Txt.LINK_TOOLS, Txt.LINK_TOOLS_DESC, onOpenTools)
+        QuickDivider()
+        QuickRow(Txt.LINK_PERMISSIONS, Txt.LINK_PERMISSIONS_DESC, onOpenPermissions)
+        QuickDivider()
+        QuickRow(Txt.LINK_ABOUT, Txt.LINK_ABOUT_DESC, onOpenAbout)
         QuickDivider()
         QuickRow(Txt.LINK_SETTINGS, Txt.LINK_SETTINGS_DESC, onOpenSettings)
     }

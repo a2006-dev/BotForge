@@ -57,6 +57,15 @@ class TerminalSession(
             // 与正常输出交错乱序。
             pb.redirectErrorStream(true)
             pb.environment().clear()
+            // proot 的 DT_NEEDED 里写的是 libtalloc.so.2，而 APK 内只有
+            // libtalloc.so（jniLibs 只收 lib*.so）。exec 时的库搜索路径由
+            // 父进程环境决定，必须在这里把补好 soname 的私有目录排在最前，
+            // 否则动态链接器直接报 "library libtalloc.so.2 not found"，
+            // proot 连启动都做不到。
+            pb.environment()["LD_LIBRARY_PATH"] = listOf(
+                TerminalEnvironment.runLibDir(context).absolutePath,
+                TerminalEnvironment.libDir(context).absolutePath
+            ).joinToString(":")
             pb.environment()["PROOT_TMP_DIR"] =
                 TerminalEnvironment.tmpDir(context).absolutePath
             pb.environment()["TERM"] = "dumb"

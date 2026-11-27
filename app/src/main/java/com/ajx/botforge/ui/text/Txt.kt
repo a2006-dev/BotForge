@@ -111,6 +111,45 @@ object Txt {
     const val AUTH_SCOPE_GLOBAL = "全局"
     const val AUTH_SCOPE_GROUP = "限群"
 
+    // ---------------------------------------------------------------- 权限页
+    const val TITLE_PERMISSIONS = "权限"
+    const val PERM_SUB_OWNER = "主人与管理员"
+    /** 验证码区标题 */
+    const val PERM_CODE_TITLE = "绑定验证码"
+    /** 未生成验证码时的说明 */
+    const val PERM_CODE_EMPTY = "未生成验证码。生成后在手机 QQ 里私聊机器人发送该码即可完成绑定。"
+    /** 生成按钮 */
+    const val PERM_CODE_GENERATE = "生成验证码"
+    /** 重新生成按钮 */
+    const val PERM_CODE_REGENERATE = "重新生成"
+    /** 有效期说明，参数为剩余秒数 */
+    fun PERM_CODE_REMAIN(seconds: Long): String = "剩余有效期 $seconds 秒"
+    /** 验证码过期 */
+    const val PERM_CODE_EXPIRED = "验证码已过期，请重新生成"
+    /** 使用方法 */
+    const val PERM_CODE_USAGE = "在手机 QQ 里私聊机器人，直接发送这 8 位验证码。验证码一次性使用，绑定成功后立即失效。"
+    /** 管理员区标题 */
+    const val PERM_ADMIN_TITLE = "管理员"
+    /** 管理员为空 */
+    const val PERM_ADMIN_EMPTY = "还没有管理员。可在 QQ 里用指令授予，也可在此移除已有管理员。"
+    /** 移除按钮 */
+    const val PERM_ADMIN_REMOVE = "移除"
+    /** 解除绑定按钮 */
+    const val PERM_UNBIND = "解除主人绑定"
+    /** 解除绑定确认标题 */
+    const val PERM_UNBIND_TITLE = "确认解除主人绑定"
+    /** 解除绑定确认正文 */
+    const val PERM_UNBIND_BODY = "解除后，原主人将失去全部管理权限，需要重新生成验证码才能再次绑定。"
+    /** 确认 */
+    const val PERM_CONFIRM = "确认解除"
+    /** 取消 */
+    const val PERM_CANCEL = "取消"
+    /** 未绑定主人时无解除按钮的含义说明 */
+    const val PERM_UNBIND_UNAVAILABLE = "当前未绑定主人，无需解除。"
+    /** 权限说明 */
+    const val PERM_NOTE_TITLE = "权限说明"
+    const val PERM_NOTE_BODY = "主人拥有全部权限；管理员可执行管理类指令，但不能转移主人身份。权限校验在机器人侧进行，此处界面仅用于查看与撤销。"
+
     // ---------------------------------------------------------------- 机器人
     const val BOT_STATE_ONLINE = "在线"
     const val BOT_STATE_CONNECTING = "连接中"
@@ -136,6 +175,12 @@ object Txt {
     const val LINK_TERMINAL_DESC = "内置 Linux 环境"
     const val LINK_PERMISSION = "权限中心"
     const val LINK_PERMISSION_DESC = "系统权限、主人绑定、管理员"
+    /** 首页快捷入口：关于 */
+    const val LINK_ABOUT = "关于"
+    const val LINK_ABOUT_DESC = "版本信息、开源许可与第三方组件"
+    /** 首页快捷入口：权限 */
+    const val LINK_PERMISSIONS = "权限"
+    const val LINK_PERMISSIONS_DESC = "主人绑定与管理员管理"
     const val LINK_SETTINGS = "设置"
     const val LINK_SETTINGS_DESC = "主题、保活、日志、关于"
 

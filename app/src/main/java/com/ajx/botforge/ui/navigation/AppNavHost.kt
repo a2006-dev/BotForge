@@ -17,6 +17,7 @@ import com.ajx.botforge.ui.screens.ModelEditScreen
 import com.ajx.botforge.ui.screens.ModelListScreen
 import com.ajx.botforge.ui.screens.PersonaEditScreen
 import com.ajx.botforge.ui.screens.PersonaListScreen
+import com.ajx.botforge.ui.screens.PermissionsScreen
 import com.ajx.botforge.ui.screens.PluginScreen
 import com.ajx.botforge.ui.screens.SettingsScreen
 import com.ajx.botforge.ui.screens.TerminalScreen
@@ -47,7 +48,7 @@ fun AppNavHost(
                 onOpenTerminal = { navController.navigate(Routes.TERMINAL) },
                 onOpenTools = { navController.navigate(Routes.TOOLS) },
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
-                onOpenPermissions = { navController.navigate(Routes.SETTINGS) },
+                onOpenPermissions = { navController.navigate(Routes.PERMISSIONS) },
                 onToggleService = onToggleService,
                 onRequestPermissions = onRequestPermissions
             )
@@ -162,6 +163,9 @@ fun AppNavHost(
 
         composable(Routes.ABOUT) {
             AboutScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.PERMISSIONS) {
+            PermissionsScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.TERMINAL) {
             TerminalScreen(onBack = { navController.popBackStack() })

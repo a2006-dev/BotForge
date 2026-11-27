@@ -18,6 +18,8 @@ object Routes {
     const val PLUGINS = "plugins"
     const val PLUGIN_DETAIL = "plugins/detail"
     const val ABOUT = "about"
+    /** 主人绑定与管理员管理。 */
+    const val PERMISSIONS = "permissions"
     /** 内置 Linux 终端。 */
     const val TERMINAL = "terminal"
     /** 工具包管理。 */
