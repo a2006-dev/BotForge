@@ -25,6 +25,20 @@ class App : Application() {
         // 主题偏好灌入内存，供根 Composition 读取
         com.ajx.botforge.ui.data.UiPrefs.load()
         com.ajx.botforge.data.Logger.i("App", "BotForge 启动 v${BuildConfig.VERSION_NAME}")
+        // 启动后台跑一次终端环境自检，结果落到
+        // /sdcard/Download/bf_terminal_diag.txt。
+        //
+        // 为什么放在启动时做：release 包的 logcat 被剥离，App 私有目录
+        // 又被 SELinux 挡住，外部完全看不到 proot/loader 的真实状态，
+        // 排查只能靠猜。每次启动自动落一份，装完机就能直接取证。
+        val appCtx = this
+        Thread {
+            runCatching {
+                if (com.ajx.botforge.term.TerminalEnvironment.isReady(appCtx)) {
+                    com.ajx.botforge.term.TerminalEnvironment.dumpDiagnostics(appCtx)
+                }
+            }
+        }.apply { isDaemon = true }.start()
         createChannels()
     }
 
