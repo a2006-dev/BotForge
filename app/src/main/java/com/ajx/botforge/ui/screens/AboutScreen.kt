@@ -330,36 +330,25 @@ private fun LinkRow(label: String, value: String, onClick: () -> Unit) {
 /**
  * 应用图标。
  *
- * 为什么要包一层 try：资源目录里同时存在位图与自适应图标（mipmap-anydpi-v26
- * 下的 XML），而 Compose 的 painterResource 只接受矢量图或位图。一旦某个
- * 密度/版本组合把 XML 解析进来，就会抛 IllegalArgumentException
- * （「Only VectorDrawables and rasterized asset types are supported」），
- * 直接把整个关于页崩掉。这里失败时退回纯色块 + 首字母，保证页面始终可用。
+ * 这里不能给 painterResource 包 runCatching / let：它是 @Composable，
+ * 一旦被塞进非 Composable 的 lambda（runCatching 的 block、let 的分支），
+ * 组合器的节点插入栈就会错位，抛出
+ * ComposeRuntimeError: Cannot end node insertion, there are no pending
+ * operations that can be realized. —— 表现为整页闪退。
+ *
+ * 因此这里一律直白调用，不做运行时兜底；安全性靠资源本身保证：
+ * 用 ic_launcher（各密度都是真实 PNG），避开 mipmap-anydpi-v26 下
+ * ic_launcher_round 那个自适应图标 XML（painterResource 不支持，会抛
+ * IllegalArgumentException: Only VectorDrawables and rasterized asset
+ * types are supported）。
  */
 @Composable
 private fun AppIconBadge() {
-    val c = botColors
-    val ok = runCatching { painterResource(R.mipmap.ic_launcher) }
-    ok.getOrNull()?.let { p ->
-        Image(
-            painter = p,
-            contentDescription = null,
-            modifier = Modifier
-                .size(88.dp)
-                .clip(RoundedCornerShape(Radius.xl))
-        )
-    } ?: Box(
+    Image(
+        painter = painterResource(R.mipmap.ic_launcher),
+        contentDescription = null,
         modifier = Modifier
             .size(88.dp)
             .clip(RoundedCornerShape(Radius.xl))
-            .background(c.brand),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "B",
-            color = c.bg1,
-            fontSize = FontSize.title,
-            fontWeight = FontWeight.Bold
-        )
-    }
+    )
 }
