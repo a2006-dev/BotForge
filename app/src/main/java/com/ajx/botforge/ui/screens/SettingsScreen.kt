@@ -63,6 +63,7 @@ fun SettingsScreen(
     var autoRestart by remember { mutableStateOf(true) }
     var searchEnabled by remember { mutableStateOf(true) }
     var agentEnabled by remember { mutableStateOf(false) }
+    var toolRounds by remember { mutableIntStateOf(Config.toolMaxRounds) }
     var termMode by remember { mutableIntStateOf(Config.termMode) }
     var termChosen by remember { mutableStateOf(Config.termChosen) }
     var logEnabled by remember { mutableStateOf(true) }
@@ -74,6 +75,7 @@ fun SettingsScreen(
         autoRestart = Config.autoRestart
         searchEnabled = Config.searchEnabled
         agentEnabled = Config.agentEnabled
+        toolRounds = Config.toolMaxRounds
         termMode = Config.termMode
         termChosen = Config.termChosen
         logEnabled = Config.logEnabled
@@ -191,6 +193,48 @@ fun SettingsScreen(
                 ) { v ->
                     agentEnabled = v
                     Config.agentEnabled = v
+                }
+                if (agentEnabled) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "工具轮数上限",
+                                color = c.textHigh,
+                                fontSize = FontSize.body,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "单次对话最多连续调用几轮工具，默认 4。" +
+                                    "调小省 token，调大能处理更复杂的任务",
+                                color = c.textLow,
+                                fontSize = FontSize.caption
+                            )
+                        }
+                        Spacer(Modifier.width(Spacing.sm))
+                        SmallButton(text = "−") {
+                            val next = (toolRounds - 1).coerceAtLeast(Config.MIN_TOOL_ROUNDS)
+                            toolRounds = next
+                            Config.toolMaxRounds = next
+                        }
+                        Text(
+                            text = toolRounds.toString(),
+                            color = c.textHigh,
+                            fontSize = FontSize.body,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = Spacing.sm)
+                        )
+                        SmallButton(text = "+") {
+                            val next = (toolRounds + 1).coerceAtMost(Config.MAX_TOOL_ROUNDS)
+                            toolRounds = next
+                            Config.toolMaxRounds = next
+                        }
+                    }
+                    SettingDivider()
                 }
                 SettingDivider()
                 Row(

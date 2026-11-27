@@ -16,13 +16,12 @@ import java.net.URL
  *   用户消息 → 模型（带 tools）→ 若返回 tool_calls 则执行 → 结果回灌 → 再问 → 直到 stop
  *
  * 约束（来自规划书与实测的被动回复限额）：
- *  - 最多 4 轮工具调用，防止模型死循环刷屏
+ *  - 工具调用轮数上限由设置页配置（Config.toolMaxRounds），默认 4，防止死循环刷屏
  *  - 每轮工具输出已由工具自己截断，这里再兜一层
  *  - 全程只在最后返回一条最终文本，中间过程不外发
  */
 object AgentLoop {
 
-    private const val MAX_ROUNDS = 4
 
     data class RunResult(
         val text: String,
@@ -76,7 +75,8 @@ object AgentLoop {
 
         val used = mutableListOf<String>()
 
-        repeat(MAX_ROUNDS) { round ->
+        val maxRounds = Config.toolMaxRounds
+        repeat(maxRounds) { round ->
             val msg = callOnce(model, msgs, toolSchemas, temperature, maxTokens) ?: return null
             val calls = msg.optJSONArray("tool_calls")
 
@@ -126,7 +126,7 @@ object AgentLoop {
             }
         }
 
-        Logger.w("Agent", "达到轮数上限 $MAX_ROUNDS，强制收尾")
+        Logger.w("Agent", "达到轮数上限 $maxRounds，强制收尾")
         val finalMsg = callOnce(model, msgs, null, temperature, maxTokens) ?: return null
         val text = finalMsg.optString("content").trim()
         return RunResult(text.ifEmpty { "（处理步骤过多，已中止）" }, used)

@@ -475,6 +475,28 @@ object Config {
         set(v) = sp.edit().putBoolean("agent_enabled", v).apply()
 
     /**
+     * 单轮对话里最多允许几轮工具调用。
+     *
+     * 原来是 AgentLoop 里的硬编码常量 4，死循环防护与"够不够用"其实是矛盾的：
+     * 处理复杂任务 4 轮经常不够，模型被迫在没拿到结果时收尾，于是开始编造。
+     * 改成可配置，用户按自己模型的能力和耐心取舍。
+     *
+     * 下限 1（不允许工具调用等于关掉 agent，另有用开关控制，不在这里表达）
+     * 上限 30：再多基本是模型在死循环，只会烧 token 和刷屏。
+     */
+    var toolMaxRounds: Int
+        get() = sp.getInt("tool_max_rounds", 4).coerceIn(MIN_TOOL_ROUNDS, MAX_TOOL_ROUNDS)
+        set(v) = sp.edit()
+            .putInt("tool_max_rounds", v.coerceIn(MIN_TOOL_ROUNDS, MAX_TOOL_ROUNDS))
+            .apply()
+
+    /** 工具轮数下限 */
+    const val MIN_TOOL_ROUNDS = 1
+
+    /** 工具轮数上限 */
+    const val MAX_TOOL_ROUNDS = 30
+
+    /**
      * Linux 容器环境的使用方式，由用户显式选择。
      *
      * 参考 Operit 的做法：终端是「可插拔能力」，不是强制安装。
