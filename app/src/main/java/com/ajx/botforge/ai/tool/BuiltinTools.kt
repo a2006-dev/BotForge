@@ -3,6 +3,7 @@ package com.ajx.botforge.ai.tool
 import com.ajx.botforge.App
 import com.ajx.botforge.data.Logger
 import com.ajx.botforge.term.LinuxShell
+import com.ajx.botforge.term.TerminalEnvironment
 import com.ajx.botforge.plugin.PluginCommand
 import com.ajx.botforge.plugin.PluginRegistry
 import org.json.JSONArray
@@ -18,6 +19,7 @@ object BuiltinTools {
 
     fun all(): List<Tool> = listOf(
         RunCommandTool,
+        DiagnoseTerminalTool,
         ReadFileTool,
         WriteFileTool,
         ListPluginsTool,
@@ -87,6 +89,38 @@ object BuiltinTools {
             else if (r.code == 0) r.output
             else "退出码 ${r.code}\n${r.output}"
             return head + body
+        }
+    }
+
+    // ------------------------------------------------- 终端环境自检
+    /**
+     * 排查 proot 容器为什么起不来。
+     *
+     * release 包的 logcat 被剥离、App 私有目录又被 SELinux 挡住，
+     * 排查时外部完全看不到内部状态。这个工具把 rootfs / 原生库 / loader /
+     * 环境变量，以及真正跑一次 proot 的退出码和输出，全部落盘到
+     * /sdcard/Download/bf_terminal_diag.txt，供人工查看。
+     */
+    object DiagnoseTerminalTool : Tool {
+        override val name = "diagnose_terminal"
+        override val description =
+            "诊断 Linux 容器为什么无法执行命令。会把环境状态与一次真实 proot 试跑的" +
+                "退出码/输出写入 /sdcard/Download/bf_terminal_diag.txt。" +
+                "当 run_command 报 execve 权限错误、找不到命令、或怀疑容器没起来时调用它。"
+
+        override val parameters: JSONObject = JSONObject()
+            .put("type", "object")
+            .put("properties", JSONObject())
+            .put("required", JSONArray())
+
+        override fun run(args: JSONObject): String {
+            return try {
+                val text = TerminalEnvironment.dumpDiagnostics(App.instance)
+                "自检完成，已写入 /sdcard/Download/bf_terminal_diag.txt\n\n" +
+                    text.take(1800)
+            } catch (e: Throwable) {
+                "自检失败：" + e.javaClass.simpleName + " " + (e.message ?: "")
+            }
         }
     }
 

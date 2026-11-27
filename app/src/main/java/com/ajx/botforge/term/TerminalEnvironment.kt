@@ -37,7 +37,7 @@ object TerminalEnvironment {
 
     const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar"
     private const val MARKER = ".bf_ready"
-    private const val ROOTFS_VERSION = "alpine-3.19.0-r3"
+    private const val ROOTFS_VERSION = "alpine-3.19.0-r4"
 
     /** 解包状态，界面据此决定展示进度还是终端。 */
     sealed class State {
@@ -226,6 +226,28 @@ object TerminalEnvironment {
                     }
                 }
             }
+            // 解包收尾必须核对产物：曾出现 tar 提前读完、MARKER 照写、
+            // 结果 rootfs 残缺，proot 一 exec 就 Permission denied 的情况。
+            // 这里做硬校验，不达标就当失败，下次启动会重新解包。
+            val expectEnv = File(dest, "usr/bin/env")
+            val expectSh = File(dest, "bin/sh")
+            val expectBox = File(dest, "bin/busybox")
+            val binCount = File(dest, "bin").list()?.size ?: 0
+            val usrBinCount = File(dest, "usr/bin").list()?.size ?: 0
+            if (!expectEnv.exists() || !expectSh.exists() || !expectBox.exists() ||
+                binCount < 5 || usrBinCount < 50
+            ) {
+                state = State.Failed(
+                    "rootfs 解包不完整（bin=$binCount usr/bin=$usrBinCount " +
+                        "env=${expectEnv.exists()} sh=${expectSh.exists()} box=${expectBox.exists()}）"
+                )
+                return false
+            }
+            // 软链接降级成实体复制时，目标文件必须可执行，否则 proot 依然起不来
+            listOf(expectEnv, expectSh, expectBox).forEach { f ->
+                if (f.exists() && !f.canExecute()) runCatching { f.setExecutable(true, false) }
+            }
+
             File(dest, MARKER).writeText(ROOTFS_VERSION)
             state = State.Ready
             onProgress(100, "")
@@ -301,6 +323,97 @@ object TerminalEnvironment {
      * 结果漏了一处就出问题——PROOT_LOADER 正是这样丢的。
      * 现在统一从这里取，避免再靠人眼保证三处一致。
      */
+
+    /**
+     * 把终端环境的真实状态写到 /sdcard/Download/bf_terminal_diag.txt。
+     * release 包日志被剥离、私有目录又被 SELinux 挡住，只能靠落地文件排查。
+     */
+    fun dumpDiagnostics(context: Context): String {
+        val sb = StringBuilder()
+        fun line(k: String, v: Any?) { sb.append(k).append(" = ").append(v).append('\n') }
+        val lib = libDir(context)
+        val runLib = runLibDir(context)
+        val root = rootfsDir(context)
+        val ld = loaderPath(context)
+
+        line("time", System.currentTimeMillis())
+        line("ROOTFS_VERSION", ROOTFS_VERSION)
+        line("nativeLibraryDir", lib.absolutePath)
+        line("filesDir", context.filesDir.absolutePath)
+        line("rootfsDir", root.absolutePath)
+        line("rootfsExists", root.exists())
+        line("markerExists", File(root, MARKER).exists())
+        line("markerContent", runCatching { File(root, MARKER).readText() }.getOrNull())
+        line("usrEnvExists", File(root, "usr/bin/env").exists())
+        line("binShExists", File(root, "bin/sh").exists())
+        line("binBusyboxExists", File(root, "bin/busybox").exists())
+        line("usrEnvCanExec", File(root, "usr/bin/env").canExecute())
+        line("libMushExists", File(root, "lib/ld-musl-aarch64.so.1").exists())
+
+        line("rootToplevel", runCatching { root.list()?.size ?: -1 }.getOrDefault(-2))
+        line("binCount", runCatching { File(root, "bin").list()?.size ?: -1 }.getOrDefault(-2))
+        line("usrBinCount", runCatching { File(root, "usr/bin").list()?.size ?: -1 }.getOrDefault(-2))
+
+        val envF = File(root, "usr/bin/env")
+        line("usrEnvIsSymlink", runCatching { java.nio.file.Files.isSymbolicLink(envF.toPath()) }.getOrDefault(false))
+        line("usrEnvLinkTarget", runCatching { java.nio.file.Files.readSymbolicLink(envF.toPath()).toString() }.getOrNull())
+        line("usrEnvLength", if (envF.exists()) envF.length() else -1L)
+
+        line("prootExists", File(lib, "libbfproot.so").exists())
+        line("prootLength", File(lib, "libbfproot.so").length())
+        line("tallocExists", File(lib, "libtalloc.so").exists())
+        line("runLibTallocExists", File(runLib, "libtalloc.so.2").exists())
+        line("loaderExists", ld.exists())
+        line("loaderLength", ld.length())
+        line("loaderCanExec", ld.canExecute())
+        line("hasBinaries", hasBinaries(context))
+        line("isReady", runCatching { isReady(context) }.getOrDefault(false))
+
+        val argv = buildCommand(context, "echo BF_OK; id; uname -a")
+        line("argv", argv.joinToString(" "))
+        val envDump = StringBuilder()
+        runCatching {
+            val pb = ProcessBuilder(argv)
+            pb.directory(context.filesDir)
+            pb.redirectErrorStream(true)
+            pb.environment().clear()
+            applyProotEnv(pb.environment(), context)
+            envDump.append("LD_LIBRARY_PATH=").append(pb.environment()["LD_LIBRARY_PATH"]).append('\n')
+            envDump.append("PROOT_TMP_DIR=").append(pb.environment()["PROOT_TMP_DIR"]).append('\n')
+            envDump.append("PROOT_LOADER=").append(pb.environment()["PROOT_LOADER"]).append('\n')
+            val proc = pb.start()
+            proc.outputStream.close()
+            val out = StringBuilder()
+            val t = Thread {
+                runCatching {
+                    proc.inputStream.bufferedReader().use { br ->
+                        br.lineSequence().forEach { out.append(it).append('\n') }
+                    }
+                }
+            }
+            t.isDaemon = true
+            t.start()
+            val done = proc.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+            if (!done) proc.destroyForcibly()
+            t.join(1000)
+            line("prootTimedOut", !done)
+            line("prootExitCode", if (done) proc.exitValue() else -1)
+            line("prootOutput", (synchronized(out) { out.toString() }).trim())
+        }.onFailure { e ->
+            line("prootException", e.javaClass.name + ": " + e.message)
+            line("prootStack", e.stackTrace.take(6).joinToString(" | ") { it.toString() })
+        }
+        sb.append("=== env ===\n").append(envDump)
+
+        val text = sb.toString()
+        runCatching { File(context.filesDir, "term_diag.txt").writeText(text) }
+        runCatching {
+            val pub = File("/storage/emulated/0/Download/bf_terminal_diag.txt")
+            pub.writeText(text)
+        }.onFailure { line("publicWriteError", it.message) }
+        return text
+    }
+
     fun applyProotEnv(env: MutableMap<String, String?>, context: Context) {
         // proot 的 DT_NEEDED 写的是 libtalloc.so.2，jniLibs 只能打 lib*.so，
         // 补好 soname 的副本在 runLibDir，必须排在库搜索路径最前。
@@ -381,13 +494,9 @@ object TerminalEnvironment {
             pb.directory(context.filesDir)
             pb.redirectErrorStream(true)
             pb.environment().clear()
-            // 与 TerminalSession 同理：proot 自身加载就需要 libtalloc.so.2，
-            // 这里的库路径必须包含补好 soname 的私有目录。
-            pb.environment()["LD_LIBRARY_PATH"] = listOf(
-                runLibDir(context).absolutePath,
-                libDir(context).absolutePath
-            ).joinToString(":")
-            pb.environment()["PROOT_TMP_DIR"] = tmpDir(context).absolutePath
+            // 统一走 applyProotEnv：少了 PROOT_LOADER，proot 只能启动本体，
+            // 在容器内 exec 任何 guest 程序都会被 SELinux 拦成 Permission denied。
+            applyProotEnv(pb.environment(), context)
             val proc = pb.start()
             val output = StringBuilder()
             BufferedReader(InputStreamReader(proc.inputStream)).forEachLine {
