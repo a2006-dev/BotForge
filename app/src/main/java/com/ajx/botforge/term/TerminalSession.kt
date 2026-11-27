@@ -112,6 +112,12 @@ class TerminalSession(
             -1
         }
         runCatching { stdin?.close() }
+        // 会话结束时给一条明确回执。
+        //
+        // 之前界面上「会话运行中」会静默变回「会话未启动」，用户只看到
+        // 输入框没反应，无法判断是 shell 退出了、还是输入没送进去。
+        // 把退出码打出来，一眼能分清：0/正常结束 vs 非 0/启动失败。
+        onOutput("\r\n[会话已结束，退出码 $exitCode]\r\n")
         onExit(exitCode)
     }
 

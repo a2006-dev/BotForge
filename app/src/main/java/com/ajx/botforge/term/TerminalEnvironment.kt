@@ -415,6 +415,51 @@ object TerminalEnvironment {
                 )
                 return false
             }
+            // ===== 关掉 Termux bootstrap 第二阶段的 fallback 自动执行 =====
+            //
+            // 真机现象（1.4.5）：每次启动会话都会先跑一大段
+            //   Starting fallback run of termux bootstrap second stage
+            //   [*] Running 'coreutils' package postinst
+            //   ...
+            //   [*] The termux bootstrap second stage completed successfully
+            // 然后 bash 直接退出，界面回到「会话未启动」，输入框发什么都没反应。
+            //
+            // 根因在 rootfs 自带的 /etc/profile.d/01-termux-bootstrap-second-stage-fallback.sh：
+            //   if [ ! -L ".../termux-bootstrap-second-stage.sh.lock" ]; then
+            //       echo "Starting fallback run ..."
+            //       "…/termux-bootstrap-second-stage.sh" || exit $?
+            //   fi
+            //   rm -f ".../01-termux-bootstrap-second-stage-fallback.sh"
+            //
+            // 这段由 /etc/profile 的 profile.d 循环自动 source。第二阶段
+            // 脚本内部结尾是 exec/exit 语义，返回值一旦非 0，`|| exit $?`
+            // 就把正在启动的交互 shell 一起结束掉，而且来不及 rm 掉自己，
+            // 于是下次启动再跑一遍 —— 表现为「每次都初始化、每次都不给提示符」。
+            //
+            // 修法：解包后预先建好那个 .lock 符号链接，让 `[ ! -L ]` 恒假，
+            // 整段 fallback 被跳过；再把 fallback 脚本本身删掉双保险。
+            // 第二阶段该装的东西（coreutils/python/nano 等 postinst）在
+            // 之前的手动验证里已经跑完并落地，不需要再执行一次。
+            runCatching {
+                val stageDir = File(dest, "etc/termux/termux-bootstrap/second-stage")
+                val lock = File(stageDir, "termux-bootstrap-second-stage.sh.lock")
+                if (!lock.exists()) {
+                    stageDir.mkdirs()
+                    // 指向不存在的目标也算「-L 为真」，用相对目标更省事
+                    runCatching {
+                        java.nio.file.Files.createSymbolicLink(
+                            lock.toPath(),
+                            File(stageDir, "termux-bootstrap-second-stage.sh").toPath()
+                        )
+                    }.onFailure {
+                        // 部分文件系统不支持硬建软链，退化成空文件也能让
+                        // `[ ! -L ]` 为真以外的分支走到，虽不理想但先保证能起来
+                        runCatching { lock.writeText("") }
+                    }
+                }
+                File(dest, "etc/profile.d/01-termux-bootstrap-second-stage-fallback.sh").delete()
+            }
+
             // 软链接降级成实体复制时，目标文件必须可执行，否则 proot 依然起不来
             listOf(expectEnv, expectSh, expectBash, expectProot).forEach { f ->
                 if (f.exists() && !f.canExecute()) runCatching { f.setExecutable(true, false) }
