@@ -55,7 +55,8 @@ fun SettingsScreen(
     onRequestOverlay: () -> Unit,
     onApplyShizuku: () -> Unit,
     onReloadBots: () -> Unit,
-    onOpenTerminal: () -> Unit = {}
+    onOpenTerminal: () -> Unit = {},
+    onOpenToolPackages: () -> Unit = {}
 ) {
     val c = botColors
     var autoStart by remember { mutableStateOf(true) }
@@ -235,6 +236,33 @@ fun SettingsScreen(
                         }
                     }
                     SettingDivider()
+                    // 工具包权限入口。只放在工具调用开启时显示：
+                    // agent 关掉的话，模型根本拿不到工具，配权限没有意义。
+                    val pkgCount = com.ajx.botforge.ai.tool.PackageRegistry.all().size
+                    val toolCount = com.ajx.botforge.ai.tool.PackageRegistry.activeTools().size
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenToolPackages)
+                            .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "工具包与权限",
+                                color = c.textHigh,
+                                fontSize = FontSize.body,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = if (pkgCount == 0) "正在加载工具包…"
+                                else "$pkgCount 个包 · 模型当前可见 $toolCount 个工具",
+                                color = c.textLow,
+                                fontSize = FontSize.caption
+                            )
+                        }
+                        SmallButton(text = "管理", onClick = onOpenToolPackages)
+                    }
                 }
                 SettingDivider()
                 Row(

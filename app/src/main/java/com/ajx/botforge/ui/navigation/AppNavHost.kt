@@ -21,6 +21,7 @@ import com.ajx.botforge.ui.screens.PermissionsScreen
 import com.ajx.botforge.ui.screens.PluginScreen
 import com.ajx.botforge.ui.screens.SettingsScreen
 import com.ajx.botforge.ui.screens.TerminalScreen
+import com.ajx.botforge.ui.screens.ToolPackageScreen
 import com.ajx.botforge.ui.screens.ToolScreen
 
 @Composable
@@ -153,7 +154,8 @@ fun AppNavHost(
                 onRequestBattery = onRequestBattery,
                 onRequestOverlay = onRequestOverlay,
                 onApplyShizuku = onApplyShizuku,
-                onReloadBots = onReloadBots
+                onReloadBots = onReloadBots,
+                onOpenToolPackages = { navController.navigate(Routes.TOOL_PACKAGES) }
             )
         }
 
@@ -172,6 +174,9 @@ fun AppNavHost(
         }
         composable(Routes.TOOLS) {
             ToolScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.TOOL_PACKAGES) {
+            ToolPackageScreen(onBack = { navController.popBackStack() })
         }
     }
 }

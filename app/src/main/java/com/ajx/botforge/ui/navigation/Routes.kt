@@ -22,8 +22,10 @@ object Routes {
     const val PERMISSIONS = "permissions"
     /** 内置 Linux 终端。 */
     const val TERMINAL = "terminal"
-    /** 工具包管理。 */
+    /** 工具列表页（插件/工具包安装）。 */
     const val TOOLS = "tools"
+    /** 工具包权限管理：包开关与单工具 ALLOW/ASK/DENY。 */
+    const val TOOL_PACKAGES = "tools/packages"
 
     /** 带机器人 id 的编辑页路由，id 为空表示新建。 */
     fun botEdit(id: String? = null): String =
