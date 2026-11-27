@@ -819,7 +819,7 @@ object TerminalEnvironment {
         if (!tallocAlias.exists() || tallocAlias.length() <= 0L) {
             if (tallocSrc.exists()) preloads += tallocSrc.absolutePath
         }
-        if (preloads.isNotEmpty()) env["LD_PRELOAD"] = preloads.joinToString(" ")"
+        if (preloads.isNotEmpty()) env["LD_PRELOAD"] = preloads.joinToString(" ")
 
 
         // 宿主侧基础环境
