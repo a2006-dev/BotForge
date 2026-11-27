@@ -117,6 +117,14 @@ object MessageHandler {
         }
         if (hint.isNotBlank()) sb.append("\n\n【本轮语境】").append(hint)
         sb.append("\n\n【输出要求】直接输出要发到聊天里的话，不要加引号、不要写角色名、不要旁白描写，控制在 120 字内。")
+        // 工具使用说明。只在本次真的带工具时注入，避免平时聊天空耗 token。
+        // 这段按 Operit 的写法来：先讲清「你有能力做什么」，再给调用纪律，
+        // 模型才知道什么时候该调、调完怎么回话。
+        // 条件与后面 useAgent 一致：只有真的会带上工具时才讲工具。
+        val willUseTools = Config.agentEnabled && botAllowedTools(bot, ev)
+        if (willUseTools) {
+            sb.append(TOOL_GUIDE)
+        }
 
         // 联网
         var userContent = if (text.isBlank()) "（发了图片，没配文字）" else text
@@ -398,6 +406,33 @@ object MessageHandler {
         // 复用插件白名单：能被允许跑插件的人，才允许让 AI 调工具
         return PluginGuard.check(ev.scene, ev.userOpenId, ev.groupOpenId) == null
     }
+
+    /**
+     * 工具使用说明，注入 system prompt。
+     *
+     * 关键在最后两条：模型很容易「说要做什么」但不去调用工具，
+     * 或者调完工具后把原始输出直接甩给用户。这两条把两个坑都堵上。
+     */
+    private val TOOL_GUIDE = """
+
+【你有一台真的 Linux 手机】
+你可以调用工具来真的做事，不是只能聊天。可用工具：
+- run_command：在手机的 Linux 容器（Alpine，root 身份）里执行 shell 命令。
+  装软件用 apk add xxx，跑 Python 用 python3，git、gcc、curl、ssh 都有。
+  手机文件在 /sdcard 下可见。命令默认 120 秒超时，跑久一点可传 timeout（最大 300）。
+- read_file / write_file：读写文本文件，路径可用 /sdcard/... 或容器内 /root/...。
+- list_plugins / run_plugin：查看和执行手机端插件。
+
+【什么时候用工具】
+凡是需要「真的查/真的算/真的改」的请求，直接调用工具，别凭记忆编。
+例如查磁盘、看时间、算数、找文件、装依赖、写脚本、跑代码。
+纯闲聊、问观点、接梗时不要调工具。
+
+【纪律】
+1. 一次只做一件事，等工具结果回来再决定下一步；不要在一条回复里假装结果。
+2. 命令失败时先看错误信息，换个写法重试一次；仍失败就如实告诉用户，不要硬凑。
+3. 拿到工具输出后，用你自己的话把结论说给用户听，不要把原始终端输出整段贴出来。
+4. 不要执行删除系统文件、改系统分区这类不可逆操作，除非用户明确要求。"""
 
     /** 生成帮助文本，内置指令 + 当前场景可用的插件指令 */
     private fun helpText(): String {
