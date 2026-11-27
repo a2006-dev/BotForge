@@ -37,7 +37,7 @@ object TerminalEnvironment {
 
     const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar"
     private const val MARKER = ".bf_ready"
-    private const val ROOTFS_VERSION = "alpine-3.19.0"
+    private const val ROOTFS_VERSION = "alpine-3.19.0-r2"
 
     /** 解包状态，界面据此决定展示进度还是终端。 */
     sealed class State {
@@ -110,7 +110,12 @@ object TerminalEnvironment {
         ensureRunLibs(context)
         val marker = File(rootfsDir(context), MARKER)
         if (!marker.exists()) return false
-        return runCatching { marker.readText().trim() == ROOTFS_VERSION }.getOrDefault(false)
+        val verOk = runCatching { marker.readText().trim() == ROOTFS_VERSION }.getOrDefault(false)
+        if (!verOk) return false
+        // 光看 MARKER 不够：旧版本把软链接失败静默吞了，环境是坏的但
+        // MARKER 照样写进去了，于是「就绪」从此刻永久成立，重装也修不好。
+        // 这里每次启动验证两个关键入口文件，缺一个就判定需要重建。
+        return hasCoreFiles(rootfsDir(context))
     }
 
     /**
@@ -142,6 +147,9 @@ object TerminalEnvironment {
             }.getOrDefault(0L)
             var unpacked = 0L
             var count = 0
+            // 软链接降级统计，收尾时打进日志，便于确认环境是否完整
+            var linkFallbacks = 0
+            var linkCopiesFailed = 0
 
             state = State.Unpacking(0, "")
             onProgress(0, "")
@@ -159,10 +167,29 @@ object TerminalEnvironment {
                                 e.isDirectory -> out.mkdirs()
 
                                 e.isSymlink -> {
+                                    // Android 10+ 的 app 私有目录被 SELinux 限制，
+                                    // Os.symlink 经常直接抛异常。早期版本用 runCatching
+                                    // 静默吞掉，结果 Alpine 里 335 个指向 busybox 的
+                                    // applet 链接全都没建成，proot 执行 /usr/bin/env
+                                    // 只会得到一句模糊的 Permission denied。
+                                    // 现在失败就退化成「复制实体文件」，语义上等价。
                                     out.parentFile?.mkdirs()
-                                    runCatching {
+                                    val created = runCatching {
                                         File(out.absolutePath).delete()
                                         Os.symlink(e.linkName, out.absolutePath)
+                                        true
+                                    }.getOrDefault(false)
+                                    if (!created) {
+                                        linkFallbacks++
+                                        val target = resolveLinkTarget(dest, name, e.linkName)
+                                        if (target != null && target.isFile) {
+                                            runCatching {
+                                                target.copyTo(out, overwrite = true)
+                                                out.setExecutable(true, false)
+                                            }.onFailure { linkCopiesFailed++ }
+                                        } else {
+                                            linkCopiesFailed++
+                                        }
                                     }
                                 }
 
@@ -204,6 +231,56 @@ object TerminalEnvironment {
             state = State.Failed(e.message ?: e.javaClass.simpleName)
             false
         }
+    }
+
+    /**
+     * 把 tar 里的软链接目标解析成 rootfs 内的实际文件。
+     *
+     * tar 里两种写法都有：
+     *  - 绝对路径 /bin/busybox  → 相对 rootfs 根
+     *  - 相对路径 ../lib/x.so    → 相对链接所在目录
+     * 都要先归一化成 rootfs 下的绝对路径再取 File，否则复制会拿到空。
+     *
+     * @param dest  rootfs 根目录
+     * @param name  链接自身的相对路径（前无前缀，已去 ./）
+     * @param linkName  tar 记录的目标路径
+     * @return 可用的目标文件，解析不出来返回 null
+     */
+    private fun resolveLinkTarget(dest: File, name: String, linkName: String?): File? {
+        if (linkName.isNullOrBlank()) return null
+        val raw = linkName.trim()
+        // 绝对的容器内路径，直接拼 rootfs
+        val path = if (raw.startsWith("/")) {
+            raw
+        } else {
+            val parent = name.substringBeforeLast('/', "")
+            if (parent.isEmpty()) raw else "$parent/$raw"
+        }
+        // 归一化 .. 与 .，避免 ././ 之类残留
+        val parts = ArrayDeque<String>()
+        for (seg in path.split('/')) {
+            when (seg) {
+                "", "." -> Unit
+                ".." -> if (parts.isNotEmpty()) parts.removeLast()
+                else -> parts.addLast(seg)
+            }
+        }
+        if (parts.isEmpty()) return null
+        return File(dest, parts.joinToString("/"))
+    }
+
+    /**
+     * 抽查容器内的关键入口是否真实可用。
+     *
+     * /usr/bin/env 是 proot 启动链的第一环（buildCommand 里直接 exec 它），
+     * /bin/sh 是所有命令的兜底解释器。这两个只要缺一个，容器就是废的，
+     * 与其让模型拿到「Permission denied」这种看不出来源的错误，
+     * 不如在这里直接判定环境不完整并触发重建。
+     */
+    private fun hasCoreFiles(root: File): Boolean {
+        val env = File(root, "usr/bin/env")
+        val sh = File(root, "bin/sh")
+        return env.exists() && sh.exists()
     }
 
     /**
