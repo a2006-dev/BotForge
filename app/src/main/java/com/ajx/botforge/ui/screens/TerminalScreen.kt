@@ -41,6 +41,7 @@ import com.ajx.botforge.term.TerminalEnvironment
 import com.ajx.botforge.term.TerminalSession
 import com.ajx.botforge.ui.components.AppCard
 import com.ajx.botforge.ui.components.PageTopBar
+import com.ajx.botforge.ui.components.PrimaryButton
 import com.ajx.botforge.ui.components.SecondaryButton
 import com.ajx.botforge.ui.text.Txt
 import com.ajx.botforge.ui.theme.FontSize
