@@ -555,6 +555,40 @@ object TerminalEnvironment {
         line("usrEnvLinkTarget", runCatching { java.nio.file.Files.readSymbolicLink(envF.toPath()).toString() }.getOrNull())
         line("usrEnvLength", if (envF.exists()) envF.length() else -1L)
 
+        // 探测 filesDir 下能否 exec。
+        //
+        // 这决定了一个关键取舍：proot 需要一个名为 libtalloc.so.2 的库
+        // （APK 里只能打成 libtalloc.so，名字不匹配 linker 的按名查找），
+        // 而私有目录可写、nativeLibraryDir 不可写。若私有目录能 exec，
+        // 就把 proot 与补名库都放私有目录；否则必须另想办法。
+        line("filesExecProbe", runCatching {
+            val probe = File(context.filesDir, "probe_exec.sh")
+            probe.writeText("#!/system/bin/sh\necho PROBE_OK\n")
+            probe.setExecutable(true, false)
+            val pb = ProcessBuilder("/system/bin/sh", probe.absolutePath)
+            pb.redirectErrorStream(true)
+            pb.environment().clear()
+            pb.environment()["PATH"] = "/system/bin:/vendor/bin"
+            val pr = pb.start()
+            val txt = pr.inputStream.bufferedReader().readText().trim()
+            pr.waitFor()
+            "$txt/${probe.canExecute()}"
+        }.getOrElse { "ERR:" + it.javaClass.simpleName })
+        // 裸跑 proot --version，看 linker 是否报缺 libtalloc.so.2
+        line("prootLinkProbe", runCatching {
+            val pb = ProcessBuilder(
+                File(context.applicationInfo.nativeLibraryDir, "libbfproot.so").absolutePath,
+                "--version"
+            )
+            pb.redirectErrorStream(true)
+            pb.environment().clear()
+            pb.environment()["LD_LIBRARY_PATH"] =
+                context.applicationInfo.nativeLibraryDir
+            val pr = pb.start()
+            val txt = pr.inputStream.bufferedReader().readText().trim()
+            pr.waitFor()
+            txt.lines().take(3).joinToString(" | ")
+        }.getOrElse { "ERR:" + it.javaClass.simpleName })
         line("prootExists", File(lib, "libbfproot.so").exists())
         line("prootLength", File(lib, "libbfproot.so").length())
         line("tallocExists", File(lib, "libtalloc.so").exists())
@@ -613,7 +647,7 @@ object TerminalEnvironment {
     fun applyProotEnv(env: MutableMap<String, String?>, context: Context) {
         // proot 的 DT_NEEDED 写的是 libtalloc.so.2，jniLibs 只能打 lib*.so，
         // 补好 soname 的副本在 runLibDir，必须排在库搜索路径最前。
-        // proot 本体与 loader 也要从私有目录取（data/app 下没有 exec 权限）。
+        // proot 本体与 loader 都指向 nativeLibraryDir（那里允许 exec）。
         ensureProot(context)
         ensureLoader(context)
         env["LD_LIBRARY_PATH"] = listOf(
@@ -637,6 +671,14 @@ object TerminalEnvironment {
         // 父进程环境被 clear() 过，PATH 不补的话 proot 自己找可执行文件
         // 也会出问题；容器内的 PATH 由 buildCommand 里的 env -i 单独给。
         env["PATH"] = "/system/bin:/system/xbin:/vendor/bin:/sbin:/bin"
+        // 关掉 seccomp 加速。
+        //
+        // 之前只在 guest 的 env -i 里传了它，那只对容器内的程序生效，
+        // proot 本体读的是**自己的进程环境**。在 untrusted_app 域下
+        // 开启 seccomp 加速会让 proot 对 guest 的 execve 拦截失效，
+        // 表现为 env 明明在、busybox 明明可执行，却仍然
+        //   execve("/usr/bin/env"): Permission denied
+        env["PROOT_NO_SECCOMP"] = "1"
         env["HOME"] = context.filesDir.absolutePath
         env["TMPDIR"] = tmp.absolutePath
         env["TERM"] = "dumb"
