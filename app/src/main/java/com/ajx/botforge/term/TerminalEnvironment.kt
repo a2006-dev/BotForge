@@ -810,6 +810,17 @@ object TerminalEnvironment {
         // 于是 proot 真去 bind 时被 SELinux 拒绝，启动即为：
         //   proot warning: can't sanitize binding "/linkerconfig": Permission denied
         // 然后会话起不来。rootfs 内自带的那份已经完全够用。
+        // home 目录必须预先存在。
+        //
+        // 下面用 -w 指定了工作目录，如果目录不存在，proot 会先报
+        //   proot warning: can't chdir(".../usr/home/."): No such file or directory
+        // 然后把 cwd 退回 "/"，界面上一堆噪音，且 HOME 与实际 cwd 不一致，
+        // 后续写 .bashrc / .termux 之类会落到根目录。
+        File(rootfs, "home").mkdirs()
+        // 终端里 ls 等命令会读 TERM，某些程序还会读 LANG，
+        // 这两个文件缺失不影响 bash 启动，但能少很多无关报错。
+        runCatching { File(rootfs, "etc/motd").takeIf { !it.exists() }?.writeText("") }
+
         val linkerCfg = File(rootfs, "linkerconfig").apply { mkdirs() }
         val ldConfig = File(linkerCfg, "ld.config.txt")
         if (!ldConfig.exists() || ldConfig.length() == 0L) {
@@ -849,7 +860,14 @@ object TerminalEnvironment {
                 // 用 exec 让命令直接接管进程，信号能透传（Ctrl+C 才能杀得掉）
                 append("exec bash -lc ").append(shellQuote(command))
             } else {
-                append("exec bash -l")
+                // 交互会话必须加 -i。
+                //
+                // 我们用的是管道而不是 PTY（Os.openpty 是 hidden API，
+                // Android 17 上反射被拦），bash 一旦发现 stdin 不是终端，
+                // 会把 -l 当成「读脚本」处理：执行完 profile 就 EOF 退出，
+                // 界面上表现为「会话运行中」闪一下就空白、输入框发出去没反应。
+                // -i 强制交互模式，即使不是 tty 也会持续从 stdin 读命令。
+                append("exec bash -il")
             }
         }
         argv += script
