@@ -927,14 +927,23 @@ object TerminalEnvironment {
                 // 用 exec 让命令直接接管进程，信号能透传（Ctrl+C 才能杀得掉）
                 append("exec bash -lc ").append(shellQuote(command))
             } else {
-                // 交互会话必须加 -i。
+                // 交互会话：用 script 包一层伪终端。
                 //
-                // 我们用的是管道而不是 PTY（Os.openpty 是 hidden API，
-                // Android 17 上反射被拦），bash 一旦发现 stdin 不是终端，
-                // 会把 -l 当成「读脚本」处理：执行完 profile 就 EOF 退出，
-                // 界面上表现为「会话运行中」闪一下就空白、输入框发出去没反应。
-                // -i 强制交互模式，即使不是 tty 也会持续从 stdin 读命令。
-                append("exec bash -il")
+                // 直接 exec bash -il 不行。ProcessBuilder 给的是管道，不是
+                // PTY，bash 启动时 stdin 立刻读到 EOF，打印完提示符就
+                // logout 退出。界面上表现为会话「闪一下就没了」，输入框
+                // 发什么都没反应 —— 因为进程早就不在了。
+                //
+                // 上一版用管道喂命令测能出提示符，是因为有数据可读，掩盖了
+                // 这个问题。真实的 UI 场景是启动后等用户输入，这段空窗期
+                // 就足以让 bash 走完 EOF 退出。
+                //
+                // Os.openpty() 是 hidden API，Android 17 上反射被拦，所以
+                // 借 rootfs 里 util-linux 的 script 来建 PTY：它内部调
+                // posix_openpt，对外表现为把子进程接到真实终端上。
+                // 实测加上这层之后，bash 的两行警告（cannot set terminal
+                // process group / no job control）也不再出现。
+                append("exec script -q -c 'exec bash -il' /dev/null")
             }
         }
         argv += script
