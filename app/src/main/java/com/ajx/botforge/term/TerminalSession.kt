@@ -1,40 +1,30 @@
 package com.ajx.botforge.term
 
 import android.content.Context
-import android.system.Os
-import android.system.StructPollfd
-import android.system.OsConstants
-import java.io.FileDescriptor
-import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 交互式终端会话。
+ * 终端会话。
  *
- * ## 为什么必须用 PTY
+ * ## 为什么不用 PTY
  *
- * `ProcessBuilder` 给出的是普通管道，不是终端设备。管道有几处根本性缺陷：
- * 一、程序会把自己判定为「非交互」，`top`、`less` 直接拒绝运行或退化成一
- * 次性输出；二、行缓冲模式下 Ctrl+C 不产生任何效果，因为没有前台进程组
- * 可以接收 SIGINT；三、输出被行缓冲，交互式提示符（如 `login:`）永远不会
- * 被刷新出来。所以这里用 `Os.openpty()` 拿一对主从描述符，把从端交给子
- * 进程作为标准流，主端留在应用侧读写。
+ * 早期实现走 `android.system.Os.openpty()`，这是 AOSP 的 hidden API。
+ * Android 9 起对非 SDK 接口有限制，后续版本进一步收紧，实测在
+ * Android 17 上反射调用被拦截，终端直接报「会话启动失败」。
  *
- * ## 关于窗口尺寸
+ * 手写 JNI 调 posix_openpt 需要额外编译原生库，且对 SELinux 策略敏感，
+ * 成本与风险都不划算。因此改用管道：Process 的标准输入输出本身就是
+ * 管道，能支持逐行命令、交互式提示符与非全屏程序。
  *
- * 设置终端尺寸需要 `TIOCSWINSZ` ioctl 与 `struct winsize`。Android 的
- * `android.system.Os` 没有暴露 `ioctlWinsize`，也没有 `StructWinsize`，
- * 而手写 JNI 或反射调用 `libcore` 内部符号都不稳妥。
+ * ## 明确的取舍
  *
- * 因此本实现**不设置窗口尺寸**，内核使用默认的 80x24。对逐行文本渲染
- * 的终端视图来说这不构成问题：界面宽度与列数无关，输出按换行折行。
- * 需要精确尺寸的全屏程序（`vim`、`top`）本就不被支持，这一点在文档与
- * 界面说明里都写明，不做隐瞒。
- *
- * ## 退出判定
- *
- * 子进程退出后所有从端副本关闭，主端 `read` 返回 0（EOF），读线程据此
- * 结束并回调退出码。
+ * 管道不是终端设备，isatty() 返回 false。因此 top、vim、less 这类
+ * 依赖终端尺寸与光标控制的程序无法正常工作；Ctrl+C 也无法通过
+ * 前台进程组投递 SIGINT，只能直接结束子进程。这两点在界面说明与
+ * 文档中均如实标注，不做隐瞒。
  */
 class TerminalSession(
     private val context: Context,
@@ -42,9 +32,8 @@ class TerminalSession(
     private val onExit: (Int) -> Unit
 ) {
 
-    /** 主端文件描述符。Os.poll / Os.read / Os.write / Os.close 都要求 FileDescriptor 对象。 */
-    private var master: FileDescriptor? = null
     private var proc: Process? = null
+    private var stdin: OutputStream? = null
     private var reader: Thread? = null
     private val closed = AtomicBoolean(false)
     private var exitCode = -1
@@ -61,96 +50,46 @@ class TerminalSession(
     fun start(command: String?): Boolean {
         if (!TerminalEnvironment.isReady(context)) return false
         return try {
-            // Os.openpty() 在 SDK 的 android.jar 里是 @hide，编译期不可见，
-            // 因此走反射。它在运行时始终存在（API 21+），方法签名
-            // 为 public static FileDescriptor[] openpty()。
-            val pty = invokeOpenpty()
-            val masterFdObj = pty[0]
-            val slave = pty[1]
-            master = masterFdObj
-            val slaveFd = fdOf(slave)
-
-            // 拿到从端的真实设备路径（/dev/pts/N）。
-            // 不能用 /proc/self/fd/N 直接当重定向目标：读完链接后拿到的是
-            // 设备路径，语义明确，也不依赖 proc 链接的可访问性。
-            val slavePath = Os.readlink("/proc/self/fd/$slaveFd")
-
             val argv = TerminalEnvironment.buildCommand(context, command)
             val pb = ProcessBuilder(argv)
             pb.directory(context.filesDir)
-            pb.redirectInput(ProcessBuilder.Redirect.from(File(slavePath)))
-            pb.redirectOutput(ProcessBuilder.Redirect.to(File(slavePath)))
-            pb.redirectError(ProcessBuilder.Redirect.to(File(slavePath)))
+            // stderr 合并进 stdout：终端只有一条输出流，分开会让错误信息
+            // 与正常输出交错乱序。
+            pb.redirectErrorStream(true)
             pb.environment().clear()
             pb.environment()["PROOT_TMP_DIR"] =
                 TerminalEnvironment.tmpDir(context).absolutePath
-            pb.environment()["TERM"] = "xterm-256color"
+            pb.environment()["TERM"] = "dumb"
 
-            proc = pb.start()
-            // 子进程已打开从端副本。应用侧这份必须关掉，否则主端永远等不到
-            // EOF——只要还有进程持有从端，主端 read 就不会返回 0。
-            runCatching { Os.close(slave) }
-            startReader()
+            val p = pb.start()
+            proc = p
+            stdin = p.outputStream
+            startReader(p.inputStream)
             true
         } catch (e: Throwable) {
+            // 具体原因必须落到 logcat：界面只有一句通用提示，
+            // 无法据此判断是 proot 无法执行、被 SELinux 拒绝，还是路径缺失。
+            android.util.Log.e("BotForge/Term", "start() 失败", e)
             onOutput("\r\n启动失败: ${e.message ?: e.javaClass.simpleName}\r\n")
             close()
             false
         }
     }
 
-    /**
-     * 取 [FileDescriptor] 的原始 int 描述符。
-     *
-     * `FileDescriptor.fd` 的公开访问器自 API 30 才出现，低版本只能读
-     * 私有字段 `descriptor`。这里统一走反射，避免随系统版本分叉。
-     */
-    private fun fdOf(fd: FileDescriptor): Int {
-        val f = FileDescriptor::class.java.getDeclaredField("descriptor")
-        f.isAccessible = true
-        return f.getInt(fd)
-    }
-
-    /**
-     * 反射调用 `android.system.Os.openpty()`。
-     *
-     * 该方法在 AOSP 中带 `@UnsupportedAppUsage` 且未进入 SDK 存根，
-     * 直接引用编译不通过；运行时可正常访问。
-     *
-     * @return 长度为 2 的数组，[0] 为主端，[1] 为从端
-     */
-    private fun invokeOpenpty(): Array<FileDescriptor> {
-        val m = Class.forName("android.system.Os")
-            .getMethod("openpty")
-        @Suppress("UNCHECKED_CAST")
-        return m.invoke(null) as Array<FileDescriptor>
-    }
-
-    /** 读线程：poll 等可读，read 取数据，EOF 结束。 */
-    private fun startReader() {
-        val fd: FileDescriptor = master ?: return
+    /** 读线程：阻塞读取，EOF 结束。 */
+    private fun startReader(stream: InputStream) {
         reader = Thread {
             val buf = ByteArray(8192)
-            val pfd = StructPollfd().apply {
-                this.fd = fd
-                events = OsConstants.POLLIN.toShort()
-            }
-            while (!closed.get()) {
-                val n = try {
-                    Os.poll(arrayOf(pfd), 300)
-                } catch (e: Throwable) {
-                    break
+            try {
+                while (!closed.get()) {
+                    val len = stream.read(buf)
+                    if (len <= 0) break
+                    // 跨块被截断的多字节序列会被替换成占位符，
+                    // 在终端里表现为偶发乱码字符，不影响命令执行。
+                    onOutput(String(buf, 0, len, Charsets.UTF_8))
                 }
-                if (n <= 0) continue
-                val len = try {
-                    Os.read(fd, buf, 0, buf.size)
-                } catch (e: Throwable) {
-                    break
-                }
-                if (len <= 0) break
-                // 按 UTF-8 解码。跨块被截断的多字节序列会被替换成占位符，
-                // 在终端里表现为偶发乱码字符，不影响命令执行。
-                onOutput(String(buf, 0, len, Charsets.UTF_8))
+            } catch (e: Throwable) {
+                // 流关闭属正常结束路径，无需上报。
             }
             finish()
         }.apply {
@@ -162,37 +101,24 @@ class TerminalSession(
 
     /** 子进程退出后的收尾。 */
     private fun finish() {
-        if (!closed.get()) {
-            exitCode = try {
-                val p = proc
-                if (p != null && p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS)) {
-                    p.exitValue()
-                } else {
-                    -1
-                }
-            } catch (e: Throwable) {
-                -1
-            }
+        if (!closed.compareAndSet(false, true)) return
+        exitCode = try {
+            val p = proc
+            if (p != null && p.waitFor(1, TimeUnit.SECONDS)) p.exitValue() else -1
+        } catch (e: Throwable) {
+            -1
         }
-        if (!closed.compareAndSet(false, true) && exitCode == -1) {
-            return
-        }
-        val fd = master
-        master = null
-        if (fd != null) runCatching { Os.close(fd) }
+        runCatching { stdin?.close() }
         onExit(exitCode)
     }
 
     /** 向终端写入文本（键盘输入）。 */
     fun write(text: String) {
-        val fd = master ?: return
         if (closed.get()) return
-        val bytes = text.toByteArray(Charsets.UTF_8)
+        val out = stdin ?: return
         try {
-            var off = 0
-            while (off < bytes.size) {
-                off += Os.write(fd, bytes, off, bytes.size - off)
-            }
+            out.write(text.toByteArray(Charsets.UTF_8))
+            out.flush()
         } catch (e: Throwable) {
             // 写入失败通常意味着会话已结束，无需额外处理。
         }
@@ -204,10 +130,8 @@ class TerminalSession(
     /** 结束会话。 */
     fun close() {
         if (!closed.compareAndSet(false, true)) return
+        runCatching { stdin?.close() }
         runCatching { proc?.destroy() }
-        val fd = master
-        master = null
-        if (fd != null) runCatching { Os.close(fd) }
         runCatching { reader?.interrupt() }
         onExit(exitCode)
     }
