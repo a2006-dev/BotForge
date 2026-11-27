@@ -87,6 +87,8 @@ fun TerminalScreen(onBack: () -> Unit) {
     var showChooser by remember {
         mutableStateOf(!com.ajx.botforge.data.Config.termChosen && !ready)
     }
+    // 用户已选过「跳过」却想在原页面继续装时，需要一个能重新打开选择页的入口。
+    var rechoose by remember { mutableStateOf(false) }
 
     // ---------- 会话 ----------
     var session by remember { mutableStateOf<TerminalSession?>(null) }
@@ -154,9 +156,12 @@ fun TerminalScreen(onBack: () -> Unit) {
     /** 解包 rootfs。 */
     fun unpack() {
         if (unpacking) return
-        unpacking = true
+        // 关键：上一次留下的 "缺少组件" 必须清掉，否则它会把进度条整块盖住，
+        // 用户点「安装」看起来就是毫无反应。
         failure = null
+        unpacking = true
         percent = 0
+        detail = ""
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
                 TerminalEnvironment.ensureReady(context) { p, d ->
@@ -166,7 +171,11 @@ fun TerminalScreen(onBack: () -> Unit) {
             }
             unpacking = false
             ready = ok
-            if (!ok) failure = Txt.TERM_UNPACK_FAILED
+            if (!ok) {
+                // 用真实的失败原因，而不是笼统的「解包失败」：
+                // 软链接失败、条目数不足、缺哪个关键文件都会写在这里。
+                failure = TerminalEnvironment.lastError() ?: Txt.TERM_UNPACK_FAILED
+            }
         }
     }
 
@@ -175,7 +184,14 @@ fun TerminalScreen(onBack: () -> Unit) {
     //  - 用户已跳过 → 什么都不做
     //  - 还没选 → 弹选择页（showChooser）
     LaunchedEffect(Unit) {
-        if (!TerminalEnvironment.hasBinaries(context)) {
+        // 原生组件齐全与否不该变成用户面前的死路：
+        // 缺了就从 assets 兜底恢复，恢复不了再给明确提示。
+        // 以前这里无条件 failure = TERM_NO_BINARY，而 failure 又没有
+        // 任何清除路径，于是哪怕环境早就正常，界面也一直挂在报错上。
+        val binariesOk = withContext(Dispatchers.IO) {
+            TerminalEnvironment.hasBinaries(context)
+        }
+        if (!binariesOk) {
             failure = Txt.TERM_NO_BINARY
         } else if (!ready && com.ajx.botforge.data.Config.termMode == 1) {
             unpack()
@@ -203,42 +219,23 @@ fun TerminalScreen(onBack: () -> Unit) {
 
         when {
             // ---------- 用户还没选过：先问，不擅自安装 ----------
-            showChooser && !ready -> TerminalChooser(
+            (showChooser || rechoose) && !ready -> TerminalChooser(
                 onInstall = {
                     com.ajx.botforge.data.Config.termMode = 1
                     com.ajx.botforge.data.Config.termChosen = true
                     showChooser = false
+                    rechoose = false
                     unpack()
                 },
                 onSkip = {
                     com.ajx.botforge.data.Config.termMode = 2
                     com.ajx.botforge.data.Config.termChosen = true
                     showChooser = false
+                    rechoose = false
                 }
             )
-
-            // ---------- 缺少可执行文件 ----------
-            failure != null && !ready -> Box(
-                modifier = Modifier.fillMaxSize().padding(Spacing.lg),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                AppCard(bordered = true) {
-                    Text(
-                        text = failure ?: "",
-                        color = c.danger,
-                        fontSize = FontSize.body
-                    )
-                    Text(
-                        text = Txt.TERM_NO_BINARY_DESC,
-                        color = c.textMid,
-                        fontSize = FontSize.small,
-                        modifier = Modifier.padding(top = Spacing.sm)
-                    )
-                }
-            }
-
-            // ---------- 解包中 ----------
-            !ready -> Column(
+            // ---------- 解包中：进度优先显示 ----------
+            unpacking -> Column(
                 modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
@@ -268,6 +265,55 @@ fun TerminalScreen(onBack: () -> Unit) {
                         color = c.textLow,
                         fontSize = FontSize.caption,
                         modifier = Modifier.padding(top = Spacing.xs)
+                    )
+                }
+            }
+            // ---------- 未就绪：说明原因，并且永远给出可点的下一步 ----------
+            // 以前 failure 是个死胡同：只把文字摆出来，没有任何按钮，
+            // 而它又排在「解包中」前面，于是点「安装」看不出任何反应。
+            !ready -> Column(
+                modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                AppCard(bordered = true) {
+                    Text(
+                        text = failure ?: Txt.TERM_NOT_INSTALLED,
+                        color = if (failure != null) c.danger else c.textHigh,
+                        fontSize = FontSize.body
+                    )
+                    Text(
+                        text = detail.ifBlank { Txt.TERM_NO_BINARY_DESC },
+                        color = c.textMid,
+                        fontSize = FontSize.small,
+                        modifier = Modifier.padding(top = Spacing.sm)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    PrimaryButton(
+                        text = if (com.ajx.botforge.data.Config.termMode == 2) {
+                            Txt.TERM_INSTALL_AGAIN
+                        } else {
+                            Txt.TERM_INSTALL
+                        },
+                        onClick = {
+                            com.ajx.botforge.data.Config.termMode = 1
+                            com.ajx.botforge.data.Config.termChosen = true
+                            showChooser = false
+                            rechoose = false
+                            unpack()
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    PrimaryButton(
+                        text = Txt.TERM_SKIP,
+                        onClick = {
+                            com.ajx.botforge.data.Config.termMode = 2
+                            com.ajx.botforge.data.Config.termChosen = true
+                            showChooser = false
+                            rechoose = false
+                            failure = null
+                        },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }

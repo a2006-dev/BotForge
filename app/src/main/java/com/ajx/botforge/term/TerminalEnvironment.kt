@@ -128,6 +128,15 @@ object TerminalEnvironment {
     fun userHasChosen(): Boolean = com.ajx.botforge.data.Config.termChosen
 
     /** proot 本体与依赖是否随包存在。 */
+    /**
+     * 最近一次失败的原因。
+     *
+     * 界面上原来只会显示一句固定的「解包失败」，用户和开发者都看不出
+     * 到底是软链接没建成、条目数不够、还是缺了某个关键文件。这里把
+     * State.Failed 携带的文本直接抛出去。
+     */
+    fun lastError(): String? = (state as? State.Failed)?.message
+
     fun hasBinaries(context: Context): Boolean {
         val dir = libDir(context)
         // 包内只会有 libtalloc.so；libtalloc.so.2 由 ensureRunLibs 在首次启动时生成。

@@ -423,10 +423,18 @@ object Txt {
     const val TERM_NO_BINARY = "缺少运行环境组件"
 
     /** 缺少可执行文件说明 */
-    const val TERM_NO_BINARY_DESC = "当前安装包未包含 proot 组件，可能由不支持的架构或裁剪版本安装。请安装官方 arm64 完整包。"
+    const val TERM_NO_BINARY_DESC = "点「安装内置环境」从安装包内解出 Alpine 环境；点「跳过」则只在 Android 本机执行命令。"
 
     /** 终端空态 */
     const val TERM_EMPTY = "点击下方启动按钮开启会话"
+
+    const val TERM_NOT_INSTALLED = "运行环境尚未安装"
+
+    const val TERM_INSTALL = "安装内置环境"
+
+    const val TERM_INSTALL_AGAIN = "改为安装内置环境"
+
+    const val TERM_SKIP = "跳过"
 
     /** 会话启动失败 */
     const val TERM_START_FAILED = "会话启动失败"
