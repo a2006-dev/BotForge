@@ -107,12 +107,26 @@ object TerminalEnvironment {
      * libbfproot.so 是合法的，复制到 filesDir 反而会被 SELinux 拒绝。
      */
     fun ensureProot(context: Context): File {
-        // 与 loader 保持一致：直接返回 nativeLibraryDir 里的真实文件。
-        // 私有目录那份软链接仍会建（供诊断/兼容），但真正执行的是这一份，
-        // 这样可执行路径与 PROOT_LOADER 处在同一目录，不会出现
-        // 「本体在 filesDir、loader 在 data/app」的路径错位。
-        runCatching { linkIntoBin(context, "libbfproot.so", "proot") }
-        return File(context.applicationInfo.nativeLibraryDir, "libbfproot.so")
+        // proot 必须从私有目录执行，且必须和 libtalloc.so.2 同目录。
+        //
+        // 原因不是权限（实测 filesExecProbe = PROBE_OK，私有目录能 exec），
+        // 而是动态链接：proot 的 DT_NEEDED 里写的是 **libtalloc.so.2**，
+        // 而 APK 的 jniLibs 只能打进 libtalloc.so —— Android linker 严格按
+        // **文件名**查找，不做 soname 映射，于是直接
+        //   CANNOT LINK EXECUTABLE: library "libtalloc.so.2" not found
+        // nativeLibraryDir 不可写，补不出这个文件名；私有目录可写，
+        // 所以把 proot 和补名后的库都放这里，保证两者同目录。
+        val target = File(runLibDir(context), "proot")
+        val src = File(context.applicationInfo.nativeLibraryDir, "libbfproot.so")
+        val needCopy = !target.exists() || target.length() != src.length()
+        if (needCopy && src.exists() && src.length() > 0L) {
+            runCatching {
+                target.parentFile?.mkdirs()
+                src.copyTo(target, overwrite = true)
+            }
+        }
+        runCatching { target.setExecutable(true, false) }
+        return if (target.exists()) target else src
     }
 
     /**
@@ -499,18 +513,21 @@ object TerminalEnvironment {
      * proot 在容器内 exec 一律 Permission denied。这里做兜底自愈。
      */
     fun ensureLoader(context: Context): File {
-        // loader 是 proot 接管 guest execve 的关键。
+        // loader 与 proot 放在同一目录（私有目录）。
         //
-        // 必须返回 **nativeLibraryDir 里的真实路径**，不能返回私有目录的软链接。
-        // 原因：proot 拿到 PROOT_LOADER 后会自己按 guest 路径解析它，
-        // 而 filesDir 被 -b 绑进了容器，同一个绝对路径在宿主机与 guest 里
-        // 指向不同位置，loader 就找不到了 —— 表现正是那句
-        //   execve("/usr/bin/env"): Permission denied
-        //   * the loader was not found or doesn't work.
-        // 真机诊断：loaderLength 已经是正确的 18136，仍然失败，可见问题
-        // 不在文件本身，而在传入的路径被重映射。
-        runCatching { linkIntoBin(context, "libbfloader.so", "loader") }
-        return File(context.applicationInfo.nativeLibraryDir, "libbfloader.so")
+        // 两者同目录可以避免 proot 解析 PROOT_LOADER 时出现路径错位，
+        // 也让整个运行时只依赖一个可写目录，行为更可预测。
+        val target = File(runLibDir(context), "loader")
+        val src = File(context.applicationInfo.nativeLibraryDir, "libbfloader.so")
+        val needCopy = !target.exists() || target.length() != src.length()
+        if (needCopy && src.exists() && src.length() > 0L) {
+            runCatching {
+                target.parentFile?.mkdirs()
+                src.copyTo(target, overwrite = true)
+            }
+        }
+        runCatching { target.setExecutable(true, false) }
+        return if (target.exists()) target else src
     }
     /**
      * 一次性把 proot 所需的环境变量灌进去。
@@ -645,9 +662,11 @@ object TerminalEnvironment {
     }
 
     fun applyProotEnv(env: MutableMap<String, String?>, context: Context) {
-        // proot 的 DT_NEEDED 写的是 libtalloc.so.2，jniLibs 只能打 lib*.so，
-        // 补好 soname 的副本在 runLibDir，必须排在库搜索路径最前。
-        // proot 本体与 loader 都指向 nativeLibraryDir（那里允许 exec）。
+        // proot 的 DT_NEEDED 写的是 libtalloc.so.2，而 jniLibs 只能打
+        // lib*.so，Android linker 又严格按文件名查找（不做 soname 映射），
+        // 所以必须在私有目录里补一个真名叫 libtalloc.so.2 的文件。
+        // ensureRunLibs 负责生成它，**必须在 proot 启动前调用**。
+        ensureRunLibs(context)
         ensureProot(context)
         ensureLoader(context)
         env["LD_LIBRARY_PATH"] = listOf(
