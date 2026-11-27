@@ -37,7 +37,7 @@ object TerminalEnvironment {
 
     const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar"
     private const val MARKER = ".bf_ready"
-    private const val ROOTFS_VERSION = "alpine-3.19.0-r2"
+    private const val ROOTFS_VERSION = "alpine-3.19.0-r3"
 
     /** 解包状态，界面据此决定展示进度还是终端。 */
     sealed class State {
@@ -100,7 +100,10 @@ object TerminalEnvironment {
     fun hasBinaries(context: Context): Boolean {
         val dir = libDir(context)
         // 包内只会有 libtalloc.so；libtalloc.so.2 由 ensureRunLibs 在首次启动时生成。
-        return File(dir, "libbfproot.so").exists() && File(dir, "libtalloc.so").exists()
+        // loader 缺了 proot 只能启动不能执行任何 guest 程序，必须一起检查
+        return File(dir, "libbfproot.so").exists() &&
+            File(dir, "libtalloc.so").exists() &&
+            loaderPath(context).exists()
     }
 
     fun isReady(context: Context): Boolean {
@@ -281,6 +284,36 @@ object TerminalEnvironment {
         val env = File(root, "usr/bin/env")
         val sh = File(root, "bin/sh")
         return env.exists() && sh.exists()
+    }
+
+    /**
+     * loader 二进制路径。
+     *
+     * 这是 proot 能在 Android 上跑起来的必要条件，之前漏了它，
+     * 导致 proot 本体能启动但 guest 程序一律 execve 被拒。
+     */
+    fun loaderPath(context: Context): File = File(libDir(context), "libbfloader.so")
+
+    /**
+     * 一次性把 proot 所需的环境变量灌进去。
+     *
+     * 以前这套赋值在三处各写一遍（TerminalSession / LinuxShell / runRaw），
+     * 结果漏了一处就出问题——PROOT_LOADER 正是这样丢的。
+     * 现在统一从这里取，避免再靠人眼保证三处一致。
+     */
+    fun applyProotEnv(env: MutableMap<String, String?>, context: Context) {
+        // proot 的 DT_NEEDED 写的是 libtalloc.so.2，jniLibs 只能打 lib*.so，
+        // 补好 soname 的副本在 runLibDir，必须排在库搜索路径最前。
+        env["LD_LIBRARY_PATH"] = listOf(
+            runLibDir(context).absolutePath,
+            libDir(context).absolutePath
+        ).joinToString(":")
+        env["PROOT_TMP_DIR"] = tmpDir(context).absolutePath
+        // 核心：proot 靠这个 loader 接管 guest 程序的 exec。
+        // 不设它，proot 会退回 syscall 拦截模式，在 Android 10+ 上
+        // 被 SELinux 直接拦成 execve Permission denied。
+        env["PROOT_LOADER"] = loaderPath(context).absolutePath
+        env["TERM"] = "dumb"
     }
 
     /**

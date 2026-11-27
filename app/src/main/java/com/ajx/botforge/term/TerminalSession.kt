@@ -62,13 +62,7 @@ class TerminalSession(
             // 父进程环境决定，必须在这里把补好 soname 的私有目录排在最前，
             // 否则动态链接器直接报 "library libtalloc.so.2 not found"，
             // proot 连启动都做不到。
-            pb.environment()["LD_LIBRARY_PATH"] = listOf(
-                TerminalEnvironment.runLibDir(context).absolutePath,
-                TerminalEnvironment.libDir(context).absolutePath
-            ).joinToString(":")
-            pb.environment()["PROOT_TMP_DIR"] =
-                TerminalEnvironment.tmpDir(context).absolutePath
-            pb.environment()["TERM"] = "dumb"
+            TerminalEnvironment.applyProotEnv(pb.environment(), context)
 
             val p = pb.start()
             proc = p

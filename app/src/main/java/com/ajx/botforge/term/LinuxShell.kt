@@ -92,13 +92,7 @@ object LinuxShell {
             // 与 TerminalSession 同因：proot 自身 DT_NEEDED 里写的是
             // libtalloc.so.2，只有补好 soname 的私有目录里才有这个文件，
             // 库搜索路径必须显式带上，否则 proot 连 exec 都过不去。
-            pb.environment()["LD_LIBRARY_PATH"] = listOf(
-                TerminalEnvironment.runLibDir(context).absolutePath,
-                TerminalEnvironment.libDir(context).absolutePath
-            ).joinToString(":")
-            pb.environment()["PROOT_TMP_DIR"] =
-                TerminalEnvironment.tmpDir(context).absolutePath
-            pb.environment()["TERM"] = "dumb"
+            TerminalEnvironment.applyProotEnv(pb.environment(), context)
 
             val proc = pb.start()
             proc.outputStream.close()
@@ -145,6 +139,96 @@ object LinuxShell {
         } catch (e: Throwable) {
             Logger.w("LinuxShell", "执行异常: " + e.javaClass.simpleName + " " + e.message)
             Result(-1, "", e.message ?: e.javaClass.simpleName, false)
+        }
+    }
+
+    /**
+     * 环境自检。
+     *
+     * proot 启动失败时对外只有一句 "execve failed"，看不出到底是哪一环断了：
+     * 是 proot 本体没解出来、libtalloc.so.2 没补上、rootfs 里的 /usr/bin/env
+     * 缺失，还是 SELinux 拦了 exec。这里逐项检查并把结果拼成可读报告，
+     * 直接给用户和模型看，不用再靠猜。
+     */
+    fun diagnose(context: Context): String {
+        val sb = StringBuilder()
+        val root = TerminalEnvironment.rootfsDir(context)
+        val lib = TerminalEnvironment.libDir(context)
+        val runLib = TerminalEnvironment.runLibDir(context)
+
+        sb.append("=== 原生库目录 ===\n").append(lib.absolutePath).append("\n")
+        listOf("libbfproot.so", "libtalloc.so", "libandroid-shmem.so").forEach { n ->
+            val f = File(lib, n)
+            sb.append(if (f.exists()) "  OK  " else "  MISS ")
+                .append(n).append("  ").append(if (f.exists()) "${f.length()}B" else "-")
+                .append("\n")
+        }
+
+        sb.append("\n=== 运行期库 ===\n").append(runLib.absolutePath).append("\n")
+        listOf("libtalloc.so.2", "libandroid-shmem.so").forEach { n ->
+            val f = File(runLib, n)
+            sb.append(if (f.exists()) "  OK  " else "  MISS ")
+                .append(n).append("  ").append(if (f.exists()) "${f.length()}B" else "-")
+                .append("\n")
+        }
+
+        sb.append("\n=== rootfs ===\n").append(root.absolutePath).append("\n")
+        sb.append("  存在: ").append(root.exists()).append("\n")
+        sb.append("  MARKER: ").append(
+            runCatching { File(root, ".bf_ready").readText().trim() }.getOrNull() ?: "（无）"
+        ).append("\n")
+        // 容器内的绝对路径，拼到 rootfs 下检查；这是启动链第一环
+        listOf("usr/bin/env", "bin/sh", "bin/busybox").forEach { p ->
+            val f = File(root, p)
+            sb.append(if (f.exists()) "  OK  " else "  MISS ")
+                .append("/").append(p)
+            if (f.exists()) {
+                sb.append("  ").append(f.length()).append("B")
+                // 链接解析目标也报一下，方便判断是不是断链
+                if (java.nio.file.Files.isSymbolicLink(f.toPath())) {
+                    sb.append("  -> ").append(
+                        runCatching {
+                            java.nio.file.Files.readSymbolicLink(f.toPath()).toString()
+                        }.getOrNull() ?: "?"
+                    )
+                }
+            }
+            sb.append("\n")
+        }
+
+        // 真跑一次最小命令，把原始错误原文带出来
+        sb.append("\n=== 试跑 ===\n")
+        val argv = runCatching { TerminalEnvironment.buildCommand(context, "echo BF_OK") }
+            .getOrElse {
+                sb.append("buildCommand 抛异常: ").append(it.message).append("\n")
+                return@diagnose sb.toString()
+            }
+        val r = runRaw(context, argv)
+        sb.append("退出码: ").append(r.code).append("\n")
+        sb.append("输出: ").append(r.output.ifBlank { "（空）" }).append("\n")
+        r.error?.let { sb.append("错误: ").append(it).append("\n") }
+        return sb.toString()
+    }
+
+    /** 不带任何降级逻辑地跑一次，专供 diagnose 取原始报错。 */
+    private fun runRaw(context: Context, argv: List<String>): Result {
+        return try {
+            val pb = ProcessBuilder(argv)
+            pb.directory(context.filesDir)
+            pb.redirectErrorStream(true)
+            pb.environment().clear()
+            TerminalEnvironment.applyProotEnv(pb.environment(), context)
+            val proc = pb.start()
+            proc.outputStream.close()
+            val out = proc.inputStream.bufferedReader().readText().trim()
+            val ok = proc.waitFor(20, TimeUnit.SECONDS)
+            if (!ok) {
+                proc.destroyForcibly()
+                return Result(-1, out.take(3000), "超时", false)
+            }
+            Result(proc.exitValue(), out.take(3000), null, false)
+        } catch (e: Throwable) {
+            Result(-1, "", e.javaClass.simpleName + ": " + e.message, false)
         }
     }
 
