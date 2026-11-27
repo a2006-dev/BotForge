@@ -2,6 +2,7 @@ package com.ajx.botforge.term
 
 import android.content.Context
 import android.system.Os
+import com.ajx.botforge.data.Logger
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
@@ -37,7 +38,10 @@ object TerminalEnvironment {
 
     const val ASSET_ROOTFS = "rootfs/alpine-rootfs.tar"
     private const val MARKER = ".bf_ready"
-    private const val ROOTFS_VERSION = "alpine-3.19.0-r4"
+    private const val ROOTFS_VERSION = "alpine-3.19.0-r5"
+    /** loader 的备份副本。Gradle 会按 ABI 过滤 jniLibs，纯符号文件容易被丢掉，
+     *  所以 assets 里再放一份，运行期发现缺失就补回去。 */
+    private const val ASSET_LOADER = "bin/libbfloader.so"
 
     /** 解包状态，界面据此决定展示进度还是终端。 */
     sealed class State {
@@ -103,7 +107,7 @@ object TerminalEnvironment {
         // loader 缺了 proot 只能启动不能执行任何 guest 程序，必须一起检查
         return File(dir, "libbfproot.so").exists() &&
             File(dir, "libtalloc.so").exists() &&
-            loaderPath(context).exists()
+            ensureLoader(context).exists()
     }
 
     fun isReady(context: Context): Boolean {
@@ -317,6 +321,27 @@ object TerminalEnvironment {
     fun loaderPath(context: Context): File = File(libDir(context), "libbfloader.so")
 
     /**
+     * 取 loader 路径，必要时从 assets 补一份。
+     *
+     * Gradle 打包 jniLibs 时会按 ABI 过滤，loader 只有 1.6KB、无动态依赖，
+     * 曾有版本被当成空库直接丢弃，导致 PROOT_LOADER 指向不存在的文件、
+     * proot 在容器内 exec 一律 Permission denied。这里做兜底自愈。
+     */
+    fun ensureLoader(context: Context): File {
+        val target = loaderPath(context)
+        if (target.exists() && target.length() > 0) return target
+        runCatching {
+            target.parentFile?.mkdirs()
+            context.assets.open(ASSET_LOADER).use { input ->
+                FileOutputStream(target).use { out -> input.copyTo(out) }
+            }
+            target.setExecutable(true, false)
+            Logger.i("TerminalEnvironment", "loader 缺失，已从 assets 恢复")
+        }
+        return target
+    }
+
+    /**
      * 一次性把 proot 所需的环境变量灌进去。
      *
      * 以前这套赋值在三处各写一遍（TerminalSession / LinuxShell / runRaw），
@@ -425,7 +450,7 @@ object TerminalEnvironment {
         // 核心：proot 靠这个 loader 接管 guest 程序的 exec。
         // 不设它，proot 会退回 syscall 拦截模式，在 Android 10+ 上
         // 被 SELinux 直接拦成 execve Permission denied。
-        env["PROOT_LOADER"] = loaderPath(context).absolutePath
+        env["PROOT_LOADER"] = ensureLoader(context).absolutePath
         env["TERM"] = "dumb"
     }
 
