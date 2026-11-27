@@ -273,6 +273,9 @@ object TerminalEnvironment {
      *
      * @param onProgress 百分比与当前条目名，在调用线程触发
      */
+    // 加锁：终端页与 HiddenExec（QQ 工具调用）可能同时触发，
+    // 两路同时往 filesDir/rootfs 里解包会互相踩文件。
+    @Synchronized
     fun ensureReady(context: Context, onProgress: (Int, String) -> Unit = { _, _ -> }): Boolean {
         if (isReady(context)) {
             state = State.Ready
@@ -878,12 +881,6 @@ object TerminalEnvironment {
      */
     fun buildHiddenExecCommand(context: Context, readyMarker: String): List<String> {
         val base = buildCommand(context, null)
-        // buildCommand(null) 返回的是「交互会话」版 argv，末尾是
-        // bash -c '<一长串 script>'，里面用 script 包了 PTY。
-        // 这里要的是更简单的东西：直接 bash -i，自己打印就绪标记。
-        // 所以从 argv 里剥掉末尾的 -c 与其脚本，重新拼一段。
-        val cut = base.indexOfLast { it == "-c" }
-        val head = if (cut > 0) base.subList(0, cut) else base
 
         val script = buildString {
             append("export PREFIX=").append(TERMUX_PREFIX).append(';')
@@ -908,7 +905,27 @@ object TerminalEnvironment {
             append("exec bash --noprofile --norc -i")
         }
 
-        return head + listOf("$TERMUX_PREFIX/bin/bash", "-c", script)
+        return spliceShellScript(base, "$TERMUX_PREFIX/bin/bash", script)
+    }
+
+    /**
+     * 把 [base] 末尾的 `<bash> -c <旧脚本>` 换成 `<bash> -c <新脚本>`。
+     *
+     * buildCommand 的 argv 末尾是 `[..., bash, "-c", script]`，**bash 本身也在
+     * "-c" 前面**。1.7.0 起这里只剥了 "-c" 之后的部分，却又追加了一遍 bash，
+     * 结果 argv 变成 `bash bash -c script`：第二个 bash 被当成脚本文件，
+     * bash 去执行一个 ELF，报
+     *   /data/data/com.termux/files/usr/bin/bash: ...: cannot execute binary file
+     * 然后立刻退出，上层一个字节的业务输出都拿不到。
+     *
+     * 抽成纯函数是为了能在 JVM 单测里锁住这一点（见 SpliceShellScriptTest）。
+     */
+    internal fun spliceShellScript(base: List<String>, bash: String, script: String): List<String> {
+        val cut = base.indexOfLast { it == "-c" }
+        require(cut >= 1 && base[cut - 1] == bash) {
+            "argv 末尾不是 `$bash -c <script>`，无法替换"
+        }
+        return base.subList(0, cut - 1) + listOf(bash, "-c", script)
     }
 
     fun buildCommand(context: Context, command: String?): List<String> {

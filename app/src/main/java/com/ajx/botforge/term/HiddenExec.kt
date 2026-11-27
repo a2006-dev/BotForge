@@ -150,6 +150,14 @@ object HiddenExec {
     private fun createShell(context: Context, key: String): Shell {
         // 复用 TerminalEnvironment 的 argv 构造：proot 本体、绑定、
         // ld.config 等等全部沿用，唯一区别是最后执行的程序是 bash -i。
+        // rootfs 的解包在 Kotlin 侧（ensureReady），不在 proot 里：
+        // 1.7.0 之后终端页不再是必经之路，QQ 工具调用必须自己保证环境就绪。
+        // 已就绪时这里只是几次文件检查。
+        if (!TerminalEnvironment.ensureReady(context)) {
+            throw IllegalStateException(
+                "Linux 环境未就绪：" + (TerminalEnvironment.lastError() ?: "rootfs 解包失败")
+            )
+        }
         val argv = TerminalEnvironment.buildHiddenExecCommand(context, READY_MARKER)
         val env = TerminalEnvironment.buildPtyEnvironment(context)
 
@@ -186,7 +194,12 @@ object HiddenExec {
         // 等就绪标记。解包 rootfs 时这里会等比较久，但只在第一次。
         val ready = awaitReady(s)
         if (!ready.ok) {
-            close()
+            // 不能调 close()：此时 shell 字段还没赋值，close() 会直接 return，
+            // 刚起的 proot 进程和读线程就泄漏了。直接清理这个新建的实例。
+            s.closed = true
+            runCatching { s.writer.close() }
+            runCatching { s.process.destroyForcibly() }
+            runCatching { s.reader.interrupt() }
             throw IllegalStateException(ready.error ?: "shell 未能就绪")
         }
         return s

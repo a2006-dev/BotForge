@@ -417,12 +417,14 @@ object MessageHandler {
 
 【你有一台真的 Linux 手机】
 你可以调用工具来真的做事，不是只能聊天。可用工具：
-- run_command：在手机的 Linux 容器（Alpine，root 身份）里执行 shell 命令。
-  装软件用 apk add xxx，跑 Python 用 python3，git、gcc、curl、ssh 都有。
+- run_command：在手机的 Linux 环境（Ubuntu，proot 内 root 身份）里执行 shell 命令。
+  包管理器是 apt（apt update / apt install -y xxx），跑 Python 用 python3，
+  curl、git、gcc 都有；缺什么先装。
   手机文件在 /sdcard 下可见。命令默认 120 秒超时，跑久一点可传 timeout（最大 300）。
-- diagnose_terminal：诊断 Linux 容器起不来的原因，把自检结果写到
-  /sdcard/Download/bf_terminal_diag.txt。run_command 报 execve 权限错误、
-  「找不到命令」或怀疑容器没起来时，先调它，再看结果判断。
+  第一条命令可能较慢（远端要起一次常驻 shell），后续会复用，不要因为慢就以为失败。
+- diagnose_terminal：诊断 Linux 环境起不来的原因，把自检结果写到
+  /sdcard/Download/bf_terminal_diag.txt。run_command 报错、提示找不到命令或
+  怀疑环境没起来时，先调它，再看结果判断。
 - read_file / write_file：读写文本文件，路径可用 /sdcard/... 或容器内 /root/...。
 - list_plugins / run_plugin：查看和执行手机端插件。
 

@@ -19,6 +19,79 @@ object Config {
     fun init(ctx: Context) {
         sp = ctx.getSharedPreferences("botforge", Context.MODE_PRIVATE)
         SecretStore.init(ctx)
+        seedDefaults()
+    }
+
+    // ------------------------------------------------------ 首次启动预设
+    /** 预设模型 id */
+    private const val SEED_MODEL_ID = "seed_model_main"
+    /** 预设人设 id */
+    private const val SEED_PERSONA_ID = "seed_persona_main"
+    /** 预设机器人 id */
+    private const val SEED_BOT_ID = "seed_bot_main"
+
+    /**
+     * 首次启动写入一套可用配置。
+     *
+     * 只在对应列表为空时写入，之后用户在界面上的任何修改都不会被覆盖 ——
+     * 每份配置各自独立判断，删掉某一个列表只会补回那一个。
+     */
+    private fun seedDefaults() {
+        val models = loadModels()
+        if (models.isEmpty()) {
+            models.add(
+                Model(
+                    id = SEED_MODEL_ID,
+                    name = "主力模型",
+                    baseUrl = "http://127.0.0.1:7863/v1",
+                    apiKey = "dda44961e707cef6417ae8e53479c6e2",
+                    model = "deepseek-v4.1-flash",
+                    type = "openai",
+                    timeout = 120,
+                    maxTokens = 800,
+                    pool = emptyList()
+                )
+            )
+            saveModels(models)
+        }
+
+        val personas = loadPersonas()
+        if (personas.isEmpty()) {
+            personas.add(
+                Persona(
+                    id = SEED_PERSONA_ID,
+                    name = "默认人设",
+                    prompt = SEED_PERSONA_PROMPT,
+                    tone = SEED_PERSONA_TONE,
+                    address = "你",
+                    memoryEnabled = true,
+                    memoryDepth = 20,
+                    temperature = 0.8f,
+                    maxTokens = 800
+                )
+            )
+            savePersonas(personas)
+        }
+
+        val bots = loadBots()
+        if (bots.isEmpty()) {
+            bots.add(
+                Bot(
+                    id = SEED_BOT_ID,
+                    name = "BotForge",
+                    appId = "102082785",
+                    // AppSecret 不入库：留空，首次启动后由用户在机器人页填写，
+                    // 填完即加密存进 SecretStore（本机保险箱），不落明文。
+                    appSecret = "",
+                    personaId = SEED_PERSONA_ID,
+                    modelId = SEED_MODEL_ID,
+                    enabled = true,
+                    intents = GROUP_INTENTS,
+                    groups = mutableListOf()
+                )
+            )
+            saveBots(bots)
+        }
     }
 
     // ------------------------------------------------------- 敏感字段读写
@@ -450,4 +523,27 @@ object Config {
 
     fun newId(prefix: String): String =
         prefix + "_" + System.currentTimeMillis().toString(36)
+
+    // ---------------------------------------------------------- 预设人设正文
+    private val SEED_PERSONA_PROMPT = """
+你是一个跑在用户自己手机上的私人助理型机器人，名字是 BotForge。
+
+你拥有真实的执行能力：这台手机上有一个 Linux 环境，你可以运行命令、读写文件、查看系统状态。当用户的问题需要动手验证或操作时，直接去执行，再根据真实结果回答，不要凭空猜测，也不要说「我无法执行」这类话。
+
+处世方式：
+- 先弄清楚用户真正想要什么，再有动作。信息不足时问一句，别自己编。
+- 动手前说明你要做什么；动手后把真实结果如实说出来，包括失败和报错。
+- 不确定的事就说不确定，永远不要编造命令输出、文件名或版本号。
+- 回复简短直接，不写客套话、不复述用户的话、不加多余的总结段。
+- 用户语气随意时你也随意；用户在解决问题时你专注、干脆。
+"""
+    private val SEED_PERSONA_TONE = """
+说话像真人，不像客服。用短句，一句话能说完就别说两句。
+
+不要用「好的」「没问题」「以下是」这类开头，直接说事。
+不要动不动就把结果排成列表或者加小标题，日常聊天就正常说话。
+不要用感叹号堆热情，也不要为了显得亲切而加表情符号——除非用户先用了。
+遇到报错就把关键那一行贴出来，讲清原因，再说怎么修；不要长篇大论地分析。
+做错了就直接承认，说清楚哪儿错了，然后说改法。
+"""
 }
