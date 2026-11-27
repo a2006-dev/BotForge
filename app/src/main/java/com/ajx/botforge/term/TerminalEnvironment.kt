@@ -606,6 +606,19 @@ object TerminalEnvironment {
             pr.waitFor()
             txt.lines().take(3).joinToString(" | ")
         }.getOrElse { "ERR:" + it.javaClass.simpleName })
+        // 直接打印 ensureProot / ensureLoader 的最终返回值。
+        // argv 里出现 nativeLibraryDir 说明 ensureProot 走了兜底分支，
+        // 需要单独确认复制到私有目录到底成功没有。
+        line("ensureProotPath", runCatching { ensureProot(context).absolutePath }.getOrElse { "ERR:" + it.message })
+        line("ensureLoaderPath", runCatching { ensureLoader(context).absolutePath }.getOrElse { "ERR:" + it.message })
+        line("runLibDirList", runCatching {
+            runLibDir(context).list()?.joinToString(",") ?: "null"
+        }.getOrElse { "ERR:" + it.message })
+        line("copyProbe", runCatching {
+            val t = File(runLibDir(context), "copyprobe.bin")
+            File(lib, "libtalloc.so").copyTo(t, overwrite = true)
+            "${t.exists()}/${t.length()}"
+        }.getOrElse { "ERR:" + it.javaClass.simpleName + ":" + it.message })
         line("prootExists", File(lib, "libbfproot.so").exists())
         line("prootLength", File(lib, "libbfproot.so").length())
         line("tallocExists", File(lib, "libtalloc.so").exists())
