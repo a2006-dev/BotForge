@@ -73,6 +73,10 @@ object TerminalEnvironment {
      * @return 所需运行库是否齐备
      */
     fun ensureRunLibs(context: Context): Boolean {
+        // 私有目录里的 proot 与 loader 必须可执行，否则 proot 一启动
+        // 就报 execve Permission denied（错误信息会误指向 /usr/bin/env）。
+        runCatching { ensureProot(context).setExecutable(true, false) }
+        runCatching { ensureLoader(context).setExecutable(true, false) }
         val src = libDir(context)
         val dst = runLibDir(context)
         // soname -> 包内实际文件名
@@ -94,7 +98,34 @@ object TerminalEnvironment {
         return ok
     }
 
-    fun prootPath(context: Context): File = File(libDir(context), "libbfproot.so")
+    fun prootPath(context: Context): File = ensureProot(context)
+
+    /**
+     * 把 proot 本体也复制到私有目录再执行。
+     *
+     * data/app/.../lib/arm64/libbfproot.so 在当前设备上可以直接 exec，
+     * 但不同 ROM 的 SELinux 策略并不一致（Operit 也是先把 proot 链接到
+     * filesDir 下的 bin 目录再跑）。统一放私有目录可以避开这类差异，
+     * 代价只是多占 250KB。
+     */
+    fun ensureProot(context: Context): File {
+        val target = File(runLibDir(context), "proot")
+        if (target.exists() && target.length() > 0) {
+            runCatching { target.setExecutable(true, false) }
+            return target
+        }
+        runCatching {
+            target.parentFile?.mkdirs()
+            val from = File(libDir(context), "libbfproot.so")
+            if (from.exists() && from.length() > 0) {
+                from.copyTo(target, overwrite = true)
+                target.setExecutable(true, false)
+            }
+        }
+        // 复制失败就退回包内路径，至少还能试一次
+        val fallback = File(libDir(context), "libbfproot.so")
+        return if (target.exists()) target else fallback
+    }
 
     /**
      * rootfs 落地目录。
@@ -141,6 +172,8 @@ object TerminalEnvironment {
         val dir = libDir(context)
         // 包内只会有 libtalloc.so；libtalloc.so.2 由 ensureRunLibs 在首次启动时生成。
         // loader 缺了 proot 只能启动不能执行任何 guest 程序，必须一起检查
+        // ensureLoader 会把 loader 复制到私有目录并 chmod +x，
+        // 这里检查的是复制后的那份（包内 lib 目录 app 域无 exec 权限）。
         return File(dir, "libbfproot.so").exists() &&
             File(dir, "libtalloc.so").exists() &&
             ensureLoader(context).exists()
@@ -408,15 +441,35 @@ object TerminalEnvironment {
      * proot 在容器内 exec 一律 Permission denied。这里做兜底自愈。
      */
     fun ensureLoader(context: Context): File {
-        val target = loaderPath(context)
-        if (target.exists() && target.length() > 0) return target
+        // loader 必须落在 App 私有目录，不能直接用 data/app/.../lib/arm64 里那份。
+        //
+        // 这是 Operit 的做法（LocalTerminalProvider.buildEnvironment 把
+        // PROOT_LOADER 指向 filesDir/usr/bin/loader，该文件由
+        // liboperit_loader.so 软链接而来，链接前先 setExecutable）：
+        // android app 域对 data/app/.../lib 下的 so **只有读权限、没有 exec
+        // 权限**，而 proot 需要把 loader 映射进 guest 进程去接管 execve，
+        // 于是 SELinux 直接拒绝，proot 只能报一句含糊的
+        //   execve("/usr/bin/env"): Permission denied
+        //   * the loader was not found or doesn't work.
+        // 放到私有目录后 exec 权限正常，loader 才能真正生效。
+        val target = File(runLibDir(context), "libbfloader.so")
+        if (target.exists() && target.length() > 0) {
+            runCatching { target.setExecutable(true, false) }
+            return target
+        }
         runCatching {
             target.parentFile?.mkdirs()
-            context.assets.open(ASSET_LOADER).use { input ->
-                FileOutputStream(target).use { out -> input.copyTo(out) }
+            // 优先用包内 lib 目录的同一份二进制，缺失时退回 assets
+            val fromLib = File(libDir(context), "libbfloader.so")
+            if (fromLib.exists() && fromLib.length() > 0) {
+                fromLib.copyTo(target, overwrite = true)
+            } else {
+                context.assets.open(ASSET_LOADER).use { input ->
+                    FileOutputStream(target).use { out -> input.copyTo(out) }
+                }
             }
             target.setExecutable(true, false)
-            Logger.i("TerminalEnvironment", "loader 缺失，已从 assets 恢复")
+            Logger.i("TerminalEnvironment", "loader 已就位: " + target.absolutePath)
         }
         return target
     }
