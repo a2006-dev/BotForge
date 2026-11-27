@@ -738,7 +738,21 @@ object TerminalEnvironment {
 
         val argv = mutableListOf<String>()
         argv += prootPath(context).absolutePath
-        argv += listOf("-0", "-r", rootfs.absolutePath, "--kill-on-exit")
+        // 这里**不能**加 -0（伪装成 root）。
+        //
+        // Termux 的 bootstrap 第二阶段的 termux-bootstrap-second-stage.sh
+        // 会校验 id -u，一旦返回 0 就直接判失败并退出：
+        //   [*] The uid '0' returned by 'id -u' command is not valid.
+        // 实测现象：终端里能看到 "Starting fallback run of termux bootstrap
+        // second stage" 然后停在那行报错，rootfs 永远初始化不完。
+        //
+        // Termux 假设自己跑在普通用户下（uid 非 0），包管理器与 dpkg
+        // 的权限判定都建立在这个前提上。去掉 -0 后容器内 uid 就是本应用的
+        // 真实 uid（如 u0_a645），符合 Termux 的预期。
+        //
+        // 代价：容器内不显示为 root。对一个面向模型执行命令的沙箱来说，
+        // 这一点无所谓，反而更安全。
+        argv += listOf("-r", rootfs.absolutePath, "--kill-on-exit")
 
         // ===== 完整 Termux 用户空间的关键绑定 =====
         //
@@ -773,6 +787,29 @@ object TerminalEnvironment {
         bind("/system")
         bind("/apex")
         bind("/vendor")
+        // /linkerconfig 里放 ld.config.txt，Android linker 靠它决定
+        // 各命名空间去哪里找库。宿主机上这个目录被 SELinux 锁死
+        // （app 域与 shell 域都是 Permission denied），绑定必然失败，
+        // 于是每个 guest 进程都会刷
+        //   WARNING: linker: failed to find generated linker configuration
+        //            from "/linkerconfig/ld.config.txt"
+        //
+        // 这个警告不只是难看，它会**污染命令输出**，直接搞坏 Termux 的
+        // bootstrap 第二阶段：
+        //   uid="$(id -u 2>&1)"   # 警告被 2>&1 混进变量
+        //   [[ ! "$uid" =~ ^[0-9]+$ ]] && 报 "uid ... is not valid" 后退出
+        // 终端里看到的就是停在那行、rootfs 永远初始化不完。
+        //
+        // 解法：在 rootfs 内自备一份合法的 ld.config.txt。
+        // proot 把 rootfs 当 /，linker 读到它就不再报警，
+        // id -u 输出恢复成干净的数字。实测警告完全消失。
+        val linkerCfg = File(rootfs, "linkerconfig").apply { mkdirs() }
+        val ldConfig = File(linkerCfg, "ld.config.txt")
+        if (!ldConfig.exists() || ldConfig.length() == 0L) {
+            runCatching { ldConfig.writeText("[section foo]\n") }
+        }
+
+        bind("/linkerconfig")
 
         bind("/dev")
         bind("/proc")
