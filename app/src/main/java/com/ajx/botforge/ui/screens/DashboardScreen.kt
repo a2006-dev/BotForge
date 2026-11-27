@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -254,7 +255,12 @@ fun DashboardScreen(
                     )
                 }
             } else {
-                items(state.events, key = { it.time + it.level + it.text }) { line ->
+                // key 必须唯一。原来用「时间+级别+文本」拼接，同一秒内
+                // 出现两条相同的日志（比如 QQ 鉴权失败每秒重试一次）就会
+                // 撞 key，Compose 直接抛 IllegalArgumentException 让 App 崩溃：
+                //   Key "...请求异常..." was already used.
+                // 这里改用列表下标，天然唯一；events 最多 6 条，下标稳定。
+                itemsIndexed(state.events, key = { index, _ -> index }) { _, line ->
                     EventRow(line = line, onClick = onOpenLogs)
                 }
             }

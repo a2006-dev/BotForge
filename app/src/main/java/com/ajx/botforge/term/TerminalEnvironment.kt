@@ -143,7 +143,15 @@ object TerminalEnvironment {
      */
     fun rootfsDir(context: Context): File = File(context.filesDir, "rootfs")
 
-    fun tmpDir(context: Context): File = File(context.filesDir, "tmp").apply { mkdirs() }
+    fun tmpDir(context: Context): File = File(context.filesDir, "tmp").apply {
+        // proot 要在这里搭 glue rootfs，目录必须存在且可写，否则
+        // 会死成 "can't create temporary directory / can't create glue rootfs"。
+        if (!exists()) mkdirs()
+        if (!canWrite()) {
+            runCatching { deleteRecursively() }
+            mkdirs()
+        }
+    }
 
     /**
      * 用户是否同意使用内置容器。
@@ -575,15 +583,32 @@ object TerminalEnvironment {
     fun applyProotEnv(env: MutableMap<String, String?>, context: Context) {
         // proot 的 DT_NEEDED 写的是 libtalloc.so.2，jniLibs 只能打 lib*.so，
         // 补好 soname 的副本在 runLibDir，必须排在库搜索路径最前。
+        // proot 本体与 loader 也要从私有目录取（data/app 下没有 exec 权限）。
+        ensureProot(context)
+        ensureLoader(context)
         env["LD_LIBRARY_PATH"] = listOf(
             runLibDir(context).absolutePath,
             libDir(context).absolutePath
         ).joinToString(":")
-        env["PROOT_TMP_DIR"] = tmpDir(context).absolutePath
+        // PROOT_TMP_DIR 必须指向一个**真实存在且可写**的目录。
+        //
+        // 这是「会话启动失败」的真正原因：proot 要在临时目录里搭 glue
+        // rootfs、并做 f2fs 兼容性探针，建不出来就直接死在这一步，
+        // 报错却只说 execve(...): Permission denied + "the loader was
+        // not found or doesn't work"，极易被误判成 loader 问题。
+        // 实测日志：can't create temporary directory / can't create glue rootfs。
+        val tmp = tmpDir(context)
+        runCatching { tmp.mkdirs() }
+        env["PROOT_TMP_DIR"] = tmp.absolutePath
         // 核心：proot 靠这个 loader 接管 guest 程序的 exec。
         // 不设它，proot 会退回 syscall 拦截模式，在 Android 10+ 上
         // 被 SELinux 直接拦成 execve Permission denied。
         env["PROOT_LOADER"] = ensureLoader(context).absolutePath
+        // 父进程环境被 clear() 过，PATH 不补的话 proot 自己找可执行文件
+        // 也会出问题；容器内的 PATH 由 buildCommand 里的 env -i 单独给。
+        env["PATH"] = "/system/bin:/system/xbin:/vendor/bin:/sbin:/bin"
+        env["HOME"] = context.filesDir.absolutePath
+        env["TMPDIR"] = tmp.absolutePath
         env["TERM"] = "dumb"
     }
 
@@ -603,20 +628,36 @@ object TerminalEnvironment {
         argv += prootPath(context).absolutePath
         argv += listOf("-0", "-r", rootfs.absolutePath, "--link2symlink")
 
-        argv += listOf("-b", "/dev", "-b", "/proc", "-b", "/sys", "-b", "/dev/pts")
-        argv += listOf("-b", "${tmp.absolutePath}:/dev/shm")
-        argv += listOf("-b", "/proc/self/fd:/dev/fd")
-        argv += listOf("-b", "/proc/self/fd/0:/dev/stdin")
-        argv += listOf("-b", "/proc/self/fd/1:/dev/stdout")
-        argv += listOf("-b", "/proc/self/fd/2:/dev/stderr")
-
-        argv += listOf("-b", "/storage/emulated/0:/sdcard")
-        argv += listOf("-b", "/storage/emulated/0")
-        argv += listOf("-b", "/data/local/tmp")
-
-        argv += listOf("-b", dataDir, "-b", "$dataDir:/data/data/$pkg")
-        argv += listOf("-b", context.filesDir.absolutePath)
-        argv += listOf("-b", lib.absolutePath)
+        // 绑定点必须先确认「真的能访问」再绑。
+        //
+        // Operit 的 can_access_bind_source 做的是同一件事：proot 遇到不存在
+        // 或无权限的 -b 源会直接失败退出，整条命令就废了（错误还会伪装成
+        // execve 权限问题）。之前无条件绑 /data/local/tmp，而 app 域在多数
+        // 设备上访问不了它，这就是「会话启动失败」的原因之一。
+        fun bind(src: String, dst: String? = null) {
+            val f = File(src)
+            val reachable = runCatching { f.exists() || f.canRead() }.getOrDefault(false)
+            if (!reachable) return
+            if (dst == null || dst == src) {
+                argv += listOf("-b", src)
+            } else {
+                argv += listOf("-b", "$src:$dst")
+            }
+        }
+        bind("/dev")
+        bind("/proc")
+        bind("/sys")
+        bind("/dev/pts")
+        bind(tmp.absolutePath, "/dev/shm")
+        bind("/proc/self/fd", "/dev/fd")
+        bind("/proc/self/fd/0", "/dev/stdin")
+        bind("/proc/self/fd/1", "/dev/stdout")
+        bind("/proc/self/fd/2", "/dev/stderr")
+        bind("/storage/emulated/0", "/sdcard")
+        bind("/storage/emulated/0")
+        bind(dataDir, "/data/data/$pkg")
+        bind(context.filesDir.absolutePath)
+        bind(lib.absolutePath)
 
         // SELinux 下读不到真实的 /proc/stat 等文件，用 rootfs 内的空文件顶上，
         // 否则 top / uptime 一类命令会直接报权限错误退出。
