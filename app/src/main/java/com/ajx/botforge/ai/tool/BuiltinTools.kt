@@ -12,21 +12,43 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-/** 内置工具集。工具只做「能做的事」，权限判断由调用方（MessageHandler）先做。 */
+/**
+ * 内置工具集。工具本身只做「能做的事」，不做权限判断。
+ *
+ * 谁能用、要不要确认，由 [PackageRegistry] 按包与用户偏好决定；
+ * 工具这里只管执行并把成败如实报回 [ToolResult]。
+ */
 object BuiltinTools {
 
     /** 单次执行输出上限，超了截断，避免把上下文撑爆 */
     private const val MAX_OUT = 2000
 
-    fun all(): List<Tool> = listOf(
-        RunCommandTool,
-        SystemCommandTool,
-        DiagnoseTerminalTool,
-        ReadFileTool,
-        WriteFileTool,
-        ListPluginsTool,
-        RunPluginTool
-    )
+    /**
+     * AgentLoop 拿工具的入口。
+     *
+     * 不直接返回固定列表，而是走注册表：包没启用、工具被 DENY、
+     * 或者处于 ASK 档，都在那一层过滤掉。这样「模型能看到什么工具」
+     * 只有一个决定点，不会出现某个调用路径绕过权限的情况。
+     *
+     * 首次调用时把内置包挂进注册表，之后直接读。注册是幂等的。
+     */
+    fun all(): List<Tool> {
+        ensureRegistered()
+        return PackageRegistry.activeTools()
+    }
+
+    @Volatile
+    private var registered = false
+
+    /** 把内置包装进注册表。重复调用无副作用。 */
+    @Synchronized
+    fun ensureRegistered() {
+        if (registered) return
+        PackageRegistry.installAll(BuiltinPackages.all())
+        registered = true
+        val (pkgs, tools) = PackageRegistry.stats()
+        com.ajx.botforge.data.Logger.i("Pkg", "已注册 $pkgs 个可用包，$tools 个工具")
+    }
 
     // ------------------------------------------------------- 执行 shell 命令
     /**

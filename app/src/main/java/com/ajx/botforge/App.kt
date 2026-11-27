@@ -22,6 +22,14 @@ class App : Application() {
         // 已发现群登记簿：被动收集 group_openid。
         // 官方没有「列出全部群」的接口，只能靠收消息时顺手记一笔。
         com.ajx.botforge.data.GroupRegistry.init(prefs)
+        // 工具包的启用状态与单工具权限。故意用独立 prefs 文件：
+        // 这是「用户对工具的管理决定」，寿命和模型/机器人配置不同，
+        // 分开存以后清配置、导出配置都不用牵连。
+        com.ajx.botforge.ai.tool.PackagePrefs.init(this)
+        // 把内置包装进注册表。放在启动时做而不是首次调用时懒加载，
+        // 是为了让「哪些包被关了」在日志里一开机就能看到，
+        // 排查「为什么模型看不到某个工具」时不用先问它一句话。
+        com.ajx.botforge.ai.tool.BuiltinTools.ensureRegistered()
         // 主题偏好灌入内存，供根 Composition 读取
         com.ajx.botforge.ui.data.UiPrefs.load()
         com.ajx.botforge.data.Logger.i("App", "BotForge 启动 v${BuildConfig.VERSION_NAME}")
