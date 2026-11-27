@@ -2,6 +2,7 @@ package com.ajx.botforge.qq
 
 import android.content.Context
 import com.ajx.botforge.ai.AiEngine
+import com.ajx.botforge.ai.ApiPool
 import com.ajx.botforge.ai.ImageUtil
 import com.ajx.botforge.ai.Intent
 import com.ajx.botforge.ai.Memory
@@ -175,7 +176,7 @@ object MessageHandler {
             answer = r?.text
             usedTools = r?.usedTools ?: emptyList()
         } else {
-            answer = AiEngine.chat(
+            answer = ApiPool.chat(
                 model, sb.toString(), history, userContent,
                 persona?.temperature ?: 0.8f,
                 persona?.maxTokens ?: model.maxTokens,
@@ -186,7 +187,7 @@ object MessageHandler {
         if (answer == null) {
             Logger.w("Msg", "模型无返回，1 秒后重试一次")
             Thread.sleep(1000)
-            answer = AiEngine.chat(
+            answer = ApiPool.chat(
                 model, sb.toString(), history, userContent,
                 persona?.temperature ?: 0.8f,
                 persona?.maxTokens ?: model.maxTokens,

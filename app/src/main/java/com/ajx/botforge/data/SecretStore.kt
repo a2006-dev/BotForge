@@ -104,4 +104,7 @@ object SecretStore {
     // ------------------------------------------------------------ 键名约定
     fun botKey(botId: String) = "bot_secret_$botId"
     fun modelKey(modelId: String) = "model_key_$modelId"
+
+    /** API 池条目的密钥槽位，与模型本体分开存，便于单条失效时替换。 */
+    fun poolKey(modelId: String, entryId: String) = "pool_key_${modelId}_$entryId"
 }

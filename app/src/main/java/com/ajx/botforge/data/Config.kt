@@ -229,6 +229,21 @@ object Config {
     }
 
     // ---------------------------------------------------------------- Model
+    /**
+     * API 池中的一个候选。
+     *
+     * 同一份模型配置下可以挂多条 key / 中转地址，调用失败时自动切换到
+     * 下一条。三项都可留空，留空即继承 [Model] 本体上的同名字段 ——
+     * 这样最常见的「同一个中转、换几把 key」只需要填 key。
+     */
+    data class PoolEntry(
+        val id: String,
+        val baseUrl: String = "",
+        val apiKey: String = "",
+        val model: String = "",
+        val note: String = ""
+    )
+
     data class Model(
         val id: String,
         val name: String,
@@ -237,7 +252,9 @@ object Config {
         val model: String,
         val type: String = "openai",   // openai | anthropic | llama
         val timeout: Int = 120,
-        val maxTokens: Int = 400
+        val maxTokens: Int = 400,
+        /** 池为空时只用本体字段；非空时先试本体再按顺序轮换候选项。 */
+        val pool: List<PoolEntry> = emptyList()
     )
 
     fun loadModels(): MutableList<Model> {
@@ -256,7 +273,8 @@ object Config {
                         o.optString("model"),
                         o.optString("type", "openai"),
                         o.optInt("timeout", 120),
-                        o.optInt("maxTokens", 400)
+                        o.optInt("maxTokens", 400),
+                        readPool(o.optJSONArray("pool"), o.optString("id"))
                     )
                 )
             }
@@ -280,9 +298,47 @@ object Config {
             writeSecret(o, "apiKey", SecretStore.modelKey(m.id), m.apiKey)
             o.put("model", m.model); o.put("type", m.type)
             o.put("timeout", m.timeout); o.put("maxTokens", m.maxTokens)
+            o.put("pool", writePool(m.pool, m.id))
             arr.put(o)
         }
         sp.edit().putString("models", arr.toString()).apply()
+    }
+
+    /**
+     * 读取 API 池。密钥与单模型一致，走 [SecretStore] 加密，
+     * 磁盘上不出现明文。
+     */
+    private fun readPool(arr: JSONArray?, modelId: String): List<PoolEntry> {
+        if (arr == null) return emptyList()
+        val out = mutableListOf<PoolEntry>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val eid = o.optString("id").ifBlank { "p$i" }
+            out.add(
+                PoolEntry(
+                    id = eid,
+                    baseUrl = o.optString("baseUrl"),
+                    apiKey = readSecret(o, "apiKey", SecretStore.poolKey(modelId, eid)),
+                    model = o.optString("model"),
+                    note = o.optString("note")
+                )
+            )
+        }
+        return out
+    }
+
+    private fun writePool(pool: List<PoolEntry>, modelId: String): JSONArray {
+        val arr = JSONArray()
+        pool.forEach { e ->
+            val o = JSONObject()
+            o.put("id", e.id)
+            o.put("baseUrl", e.baseUrl)
+            writeSecret(o, "apiKey", SecretStore.poolKey(modelId, e.id), e.apiKey)
+            o.put("model", e.model)
+            o.put("note", e.note)
+            arr.put(o)
+        }
+        return arr
     }
 
     // ---------------------------------------------------------------- 全局开关

@@ -6,15 +6,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,8 +29,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import com.ajx.botforge.ai.ApiPool
+import com.ajx.botforge.ai.ModelProbe
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.ui.components.FormField
 import com.ajx.botforge.ui.components.PageTopBar
@@ -43,7 +51,9 @@ import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
 import com.ajx.botforge.ui.theme.botColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** 三类接口协议，与 Config.Model.type 注释里的取值一致。 */
 private val MODEL_TYPES = listOf(
@@ -80,6 +90,19 @@ fun ModelEditScreen(
     var timeout by remember { mutableStateOf("120") }
     var maxTokens by remember { mutableStateOf("400") }
 
+    // ---- 连通性测试 ----
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<ModelProbe.PingResult?>(null) }
+
+    // ---- 拉取可选模型 ----
+    var fetching by remember { mutableStateOf(false) }
+    var fetched by remember { mutableStateOf<List<ModelProbe.ModelInfo>>(emptyList()) }
+    var fetchMsg by remember { mutableStateOf<String?>(null) }
+    var showPicker by remember { mutableStateOf(false) }
+
+    // ---- API 池 ----
+    var pool by remember { mutableStateOf<List<Config.PoolEntry>>(emptyList()) }
+
     val isNew = modelId.isEmpty()
 
     LaunchedEffect(modelId) {
@@ -98,6 +121,7 @@ fun ModelEditScreen(
                     type = m.type
                     timeout = m.timeout.toString()
                     maxTokens = m.maxTokens.toString()
+                    pool = m.pool
                 }
             } catch (e: Exception) {
                 error = e.message ?: "读取失败"
@@ -106,6 +130,67 @@ fun ModelEditScreen(
     }
 
     val canSave = name.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank() && !saving
+
+    /** 把当前界面上的编辑值拼成一个临时模型，供测试/拉列表使用。 */
+    fun draftModel(): Config.Model = Config.Model(
+        id = if (modelId.isNotEmpty()) modelId else "draft",
+        name = name.ifBlank { "未命名" },
+        baseUrl = baseUrl.trim().trimEnd('/'),
+        apiKey = if (apiKey.isNotEmpty()) apiKey.trim() else "",
+        model = model.trim(),
+        type = type,
+        timeout = (timeout.toIntOrNull() ?: 120).coerceIn(5, 600),
+        maxTokens = (maxTokens.toIntOrNull() ?: 400).coerceIn(32, 32000),
+        pool = emptyList()
+    )
+
+    /**
+     * 连通性测试。
+     *
+     * 刚新建、还没填密钥时用已保存的那把，避免用户改个名字就测不通。
+     */
+    fun doTest() {
+        if (testing) return
+        testing = true
+        testResult = null
+        scope.launch {
+            val draft = draftModel()
+            val effective = if (draft.apiKey.isEmpty()) {
+                withContext(Dispatchers.IO) {
+                    if (modelId.isNotEmpty()) repo.findModel(modelId)?.apiKey.orEmpty() else ""
+                }
+            } else draft.apiKey
+            val r = withContext(Dispatchers.IO) {
+                ModelProbe.ping(draft.copy(apiKey = effective))
+            }
+            testResult = r
+            testing = false
+        }
+    }
+
+    /** 向服务端要一份可用模型清单。 */
+    fun doFetch() {
+        if (fetching) return
+        fetching = true
+        fetchMsg = null
+        fetched = emptyList()
+        showPicker = false
+        scope.launch {
+            val draft = draftModel()
+            val effective = if (draft.apiKey.isEmpty()) {
+                withContext(Dispatchers.IO) {
+                    if (modelId.isNotEmpty()) repo.findModel(modelId)?.apiKey.orEmpty() else ""
+                }
+            } else draft.apiKey
+            val r = withContext(Dispatchers.IO) {
+                ModelProbe.listModels(draft.copy(apiKey = effective))
+            }
+            fetched = r.models
+            fetchMsg = r.message
+            showPicker = r.ok && r.models.isNotEmpty()
+            fetching = false
+        }
+    }
 
     fun doSave() {
         if (!canSave) return
@@ -125,7 +210,8 @@ fun ModelEditScreen(
                         model = model.trim(),
                         type = type,
                         timeout = (timeout.toIntOrNull() ?: 120).coerceIn(5, 600),
-                        maxTokens = (maxTokens.toIntOrNull() ?: 400).coerceIn(32, 32000)
+                        maxTokens = (maxTokens.toIntOrNull() ?: 400).coerceIn(32, 32000),
+                        pool = pool
                     )
                 )
                 saving = false
@@ -194,6 +280,55 @@ fun ModelEditScreen(
                 placeholder = "deepseek-v4.1-flash",
                 helper = Txt.FIELD_MODEL_HELP
             )
+            Spacer(Modifier.height(Spacing.sm))
+            TextButton(
+                text = if (fetching) Txt.MP_FETCHING else Txt.MP_FETCH_BTN,
+                onClick = { if (!fetching) doFetch() },
+                color = c.brand
+            )
+            if (fetchMsg != null) {
+                Spacer(Modifier.height(Spacing.xs))
+                StatusBadge(
+                    text = fetchMsg!!,
+                    tone = if (fetched.isEmpty()) StatusTone.Warning else StatusTone.Success
+                )
+            }
+            if (showPicker && fetched.isNotEmpty()) {
+                Spacer(Modifier.height(Spacing.sm))
+                Text(
+                    text = Txt.MP_PICK_HINT,
+                    color = c.textLow,
+                    fontSize = FontSize.caption
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                fetched.forEach { info ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                model = info.id
+                                showPicker = false
+                            }
+                            .padding(vertical = Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = info.id,
+                            color = if (info.id == model) c.brand else c.textHigh,
+                            fontSize = FontSize.caption,
+                            fontWeight = if (info.id == model) FontWeight.Medium else FontWeight.Normal,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (info.display != info.id) {
+                            Text(
+                                text = info.display,
+                                color = c.textLow,
+                                fontSize = FontSize.caption
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(Modifier.height(Spacing.lg))
             SectionHeader("协议类型")
@@ -226,6 +361,130 @@ fun ModelEditScreen(
                 onValueChange = { maxTokens = it.filter { c -> c.isDigit() } },
                 placeholder = "400",
                 keyboardType = KeyboardType.Number
+            )
+
+            Spacer(Modifier.height(Spacing.lg))
+            SectionHeader("连通性")
+            Spacer(Modifier.height(Spacing.sm))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    text = if (testing) Txt.MP_TESTING else Txt.MP_TEST_BTN,
+                    onClick = { if (!testing) doTest() },
+                    color = c.brand
+                )
+                Spacer(Modifier.width(Spacing.sm))
+                testResult?.let { r ->
+                    StatusBadge(
+                        text = r.message,
+                        tone = if (r.ok) StatusTone.Success else StatusTone.Danger
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(Spacing.lg))
+            SectionHeader(Txt.MP_SECTION_POOL)
+            Spacer(Modifier.height(Spacing.xs))
+            Text(
+                text = Txt.MP_POOL_HINT,
+                color = c.textLow,
+                fontSize = FontSize.caption
+            )
+            Spacer(Modifier.height(Spacing.sm))
+            // 主配置行，固定第一条，只展示不删除
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(c.bg2, RoundedCornerShape(Radius.sm))
+                    .padding(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = Txt.MP_POOL_MAIN,
+                    color = c.textHigh,
+                    fontSize = FontSize.caption,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = model.ifBlank { "—" },
+                    color = c.textLow,
+                    fontSize = FontSize.caption
+                )
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            if (pool.isEmpty()) {
+                Text(
+                    text = Txt.MP_POOL_EMPTY,
+                    color = c.textLow,
+                    fontSize = FontSize.caption
+                )
+            }
+            pool.forEachIndexed { index, entry ->
+                val eid = entry.id
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = Spacing.sm)
+                        .background(c.bg2, RoundedCornerShape(Radius.sm))
+                        .padding(Spacing.sm)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "#${index + 1}  " + (entry.note.ifBlank { Txt.MP_POOL_ADD }),
+                            color = c.textHigh,
+                            fontSize = FontSize.caption,
+                            modifier = Modifier.weight(1f)
+                        )
+                        val fails = ApiPool.failCount(
+                            if (modelId.isNotEmpty()) modelId else "draft", eid
+                        )
+                        StatusBadge(
+                            text = if (fails == 0) Txt.MP_POOL_HEALTHY else "${Txt.MP_POOL_FAILS} $fails",
+                            tone = if (fails == 0) StatusTone.Success else StatusTone.Warning
+                        )
+                        Spacer(Modifier.width(Spacing.sm))
+                        TextButton(
+                            text = Txt.MP_POOL_DEL,
+                            color = c.danger,
+                            onClick = { pool = pool.filterNot { it.id == eid } }
+                        )
+                    }
+                    Spacer(Modifier.height(Spacing.xs))
+                    PoolField(
+                        label = Txt.MP_POOL_KEY,
+                        value = entry.apiKey,
+                        placeholder = Txt.MP_POOL_INHERIT,
+                        onChange = { v ->
+                            pool = pool.map { if (it.id == eid) it.copy(apiKey = v) else it }
+                        }
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    PoolField(
+                        label = Txt.MP_POOL_BASEURL,
+                        value = entry.baseUrl,
+                        placeholder = Txt.MP_POOL_INHERIT,
+                        onChange = { v ->
+                            pool = pool.map { if (it.id == eid) it.copy(baseUrl = v) else it }
+                        }
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                    PoolField(
+                        label = Txt.MP_POOL_MODEL,
+                        value = entry.model,
+                        placeholder = Txt.MP_POOL_INHERIT,
+                        onChange = { v ->
+                            pool = pool.map { if (it.id == eid) it.copy(model = v) else it }
+                        }
+                    )
+                }
+            }
+            TextButton(
+                text = Txt.MP_POOL_ADD,
+                color = c.brand,
+                onClick = {
+                    pool = pool + Config.PoolEntry(
+                        id = "p" + System.currentTimeMillis().toString().takeLast(6)
+                    )
+                }
             )
 
             Spacer(Modifier.height(Spacing.xl))
@@ -276,6 +535,55 @@ private fun TypeChip(
             color = if (selected) c.brand else c.textLow,
             fontSize = FontSize.caption,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+        )
+    }
+}
+
+/**
+ * API 池内的单个输入框。
+ *
+ * 与 FormField 的区别：这里不显示 label 上方的整行排版，做成紧凑一行，
+ * 因为池条目可能有好几条，纵向空间要省。
+ */
+@Composable
+private fun PoolField(
+    label: String,
+    value: String,
+    placeholder: String,
+    onChange: (String) -> Unit
+) {
+    val c = botColors
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            color = c.textMid,
+            fontSize = FontSize.caption,
+            modifier = Modifier.width(72.dp)
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = TextStyle(color = c.textHigh, fontSize = FontSize.caption),
+            cursorBrush = SolidColor(c.brand),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(c.bg1, RoundedCornerShape(Radius.xs))
+                        .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            color = c.textLow,
+                            fontSize = FontSize.caption
+                        )
+                    }
+                    inner()
+                }
+            }
         )
     }
 }

@@ -498,4 +498,30 @@ object Txt {
     fun TOOL_RESULT_META(exitCode: Int, durationMs: Long): String =
         "退出码 $exitCode · ${durationMs}ms"
 
+
+
+    // ------------------------------------------------------------ 模型探测与 API 池
+    const val TITLE_API_POOL = "API 池"
+    const val MP_TEST_BTN = "测试连通性"
+    const val MP_TESTING = "测试中…"
+    const val MP_FETCH_BTN = "获取可选模型"
+    const val MP_FETCHING = "正在读取模型列表…"
+    const val MP_FETCH_EMPTY = "没有获取到模型，检查接口地址与密钥"
+    const val MP_PICK_TITLE = "选择模型"
+    const val MP_PICK_HINT = "点击任意一项填入模型名"
+    const val MP_SECTION_POOL = "故障转移"
+    const val MP_POOL_EMPTY = "还没有候选。添加后，主配置失败时会自动切换。"
+    const val MP_POOL_ADD = "添加候选"
+    const val MP_POOL_MAIN = "主配置"
+    const val MP_POOL_INHERIT = "留空则继承主配置"
+    const val MP_POOL_NOTE = "备注（可选）"
+    const val MP_POOL_BASEURL = "接口地址"
+    const val MP_POOL_MODEL = "模型名"
+    const val MP_POOL_KEY = "密钥"
+    const val MP_POOL_DEL = "删除"
+    const val MP_POOL_FAILS = "连续失败"
+    const val MP_POOL_HEALTHY = "正常"
+    const val MP_POOL_RESET = "重置池状态"
+    const val MP_POOL_HINT = "请求失败时会按顺序自动尝试下一条，成功即返回。"
+    const val MP_COPIED = "已复制"
 }

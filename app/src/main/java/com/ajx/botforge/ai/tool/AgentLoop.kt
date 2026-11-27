@@ -55,7 +55,7 @@ object AgentLoop {
     ): RunResult? {
         // anthropic 协议暂不支持工具，退回纯对话
         if (model.type == "anthropic" || tools.isEmpty()) {
-            val t = com.ajx.botforge.ai.AiEngine.chat(
+            val t = com.ajx.botforge.ai.ApiPool.chat(
                 model, system, history, user, temperature, maxTokens
             )
             return t?.let { RunResult(it, emptyList()) }
