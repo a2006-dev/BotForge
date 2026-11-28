@@ -49,6 +49,50 @@ object AgentLoop {
         val userOpenId: String? = null
     )
 
+    /**
+     * 审计上下文的进程内桥。
+     *
+     * ## 为什么需要它
+     *
+     * 审计要记 botId / scene / userOpenId，这三个字段只有上层知道，
+     * AgentLoop 只是转发者；而真正写审计记录的地方在 ToolExecutor 的守卫工具里。
+     * 中间隔着的是 Tool.run(args) 这个接口，全仓十几个工具实现、几个包、多个插件
+     * 都按它写。为了多带三个字段去改接口签名，等于把整条工具链重写一遍，
+     * 收益是三条审计字段，代价是一次大面积回归，不划算。
+     *
+     * 折中办法就是这个桥：AgentLoop 进入 run 时把上下文放进来，退出时（try/finally）
+     * 清掉；ToolExecutor 写审计时到这里取，取不到就沿用改造前的默认值
+     * （空 botId / internal / null），行为只会变好，不会变差。
+     *
+     * ## 局限（必须知道，别当成完整方案）
+     *
+     * 这是单线程池语义下的简化方案。BotManager 用固定线程池处理消息，
+     * 一个线程同一时刻只服务一条消息，所以「set -> 跑工具 -> clear」不会互相踩。
+     * 但一旦出现下面任一情况，审计归属就可能串到别人头上：
+     *
+     *  - 同一条线程上重入（工具内部再次调用 AgentLoop.run）：内层的 clear 会把外层的清掉
+     *  - 换成协程或线程切换，set 和 clear 不在同一个线程
+     *  - 工具自己起子线程再调用别的工具
+     *
+     * 完整方案应当把上下文沿着 Tool.run 链路显式往下传（或跟随协程上下文传递），
+     * 那需要改动接口和所有实现，本轮先不动，等工具接口本身要动的时候一并做。
+     */
+    object AuditBridge {
+
+        @Volatile
+        private var current: AuditContext? = null
+
+        fun set(ctx: AuditContext?) {
+            current = ctx
+        }
+
+        fun get(): AuditContext? = current
+
+        fun clear() {
+            current = null
+        }
+    }
+
     // ------------------------------------------------------------ 防编造模式
     /**
      * 「声称已经干完活」的表述。刻意收窄，只匹配明确的完成语气，
@@ -118,6 +162,35 @@ object AgentLoop {
         tools: List<Tool>,
         onToolCall: ((String, JSONObject) -> Unit)? = null,
         auditCtx: AuditContext = AuditContext()
+    ): RunResult? {
+        // 进入本轮之前把审计归属放进桥，退出时必须清掉（finally 保证异常路径也清）：
+        // 线程池会复用线程，残留的上下文会把下一条消息的审计记到上一个人头上。
+        // 桥的局限见 AuditBridge 的注释，这里只是最小改动方案。
+        AuditBridge.set(auditCtx)
+        try {
+            return runInner(
+                model, system, history, user, temperature, maxTokens, tools, onToolCall, auditCtx
+            )
+        } finally {
+            AuditBridge.clear()
+        }
+    }
+
+    /**
+     * 真正的循环实现。拆出来是为了让 run 能用 try/finally 包住整段逻辑：
+     * 原逻辑里有多个提前 return（协议不支持、请求失败、编造重问后给实话、轮数耗尽），
+     * 逐处补 clear 迟早会漏一处，包一层才是一眼能看完的正确做法。
+     */
+    private fun runInner(
+        model: Config.Model,
+        system: String,
+        history: List<com.ajx.botforge.ai.AiEngine.Msg>,
+        user: String,
+        temperature: Float,
+        maxTokens: Int,
+        tools: List<Tool>,
+        onToolCall: ((String, JSONObject) -> Unit)?,
+        auditCtx: AuditContext
     ): RunResult? {
         // anthropic 协议暂不支持工具，退回纯对话
         if (model.type == "anthropic" || tools.isEmpty()) {

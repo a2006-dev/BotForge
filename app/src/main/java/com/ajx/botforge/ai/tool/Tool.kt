@@ -73,6 +73,26 @@ fun Tool.toOpenAiSchema(): JSONObject = JSONObject()
             .put("parameters", parameters)
     )
 
+/**
+ * 把工具转成 Anthropic Messages 的 tools 数组元素。
+ *
+ * ## 与 [toOpenAiSchema] 的三处硬差异
+ *
+ * 1. 没有 `type:"function"` 外层包裹，工具定义直接是 `{name, description, input_schema}`；
+ * 2. 参数键叫 `input_schema`，不叫 `parameters`；
+ * 3. 没有 `function` 子对象，三个字段平铺。
+ *
+ * 写错任何一处，服务端要么 400，要么悄悄忽略工具定义（模型于是永远不调用），
+ * 后者更难查 —— 表现和「模型不会用工具」一模一样。
+ *
+ * 注意：这里**不**复用 [toOpenAiSchema] 的结果再转换。OpenAI 版把 parameters 塞在
+ * function 子对象里，反解一遍多两次序列化，还容易在改 OpenAI 版时被动波及 Anthropic。
+ */
+fun Tool.toAnthropicSchema(): JSONObject = JSONObject()
+    .put("name", name)
+    .put("description", description)
+    .put("input_schema", parameters)
+
 /** 空参数工具的便捷 schema */
 fun noParams(): JSONObject = JSONObject()
     .put("type", "object")

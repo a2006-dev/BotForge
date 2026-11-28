@@ -179,7 +179,12 @@ object MessageHandler {
                 tools = tools,
                 onToolCall = { name, args ->
                     PluginGuard.audit(ev.scene, ev.userOpenId, ev.groupOpenId, "tool:$name", true, args.toString())
-                }
+                },
+                auditCtx = AgentLoop.AuditContext(
+                    botId = bot.id,
+                    scene = ev.scene,
+                    userOpenId = ev.userOpenId
+                )
             )
             answer = r?.text
             usedTools = r?.usedTools ?: emptyList()
