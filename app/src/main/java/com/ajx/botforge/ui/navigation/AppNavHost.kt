@@ -155,7 +155,10 @@ fun AppNavHost(
                 onRequestOverlay = onRequestOverlay,
                 onApplyShizuku = onApplyShizuku,
                 onReloadBots = onReloadBots,
-                onOpenToolPackages = { navController.navigate(Routes.TOOL_PACKAGES) }
+                onOpenToolPackages = { navController.navigate(Routes.TOOL_PACKAGES) },
+                // 设置页的「终端环境 → 配置/重装」跳这里。
+                // 之前漏传此参数，走的是默认空 lambda，点击毫无反应。
+                onOpenTerminal = { navController.navigate(Routes.TERMINAL) }
             )
         }
 

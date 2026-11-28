@@ -212,6 +212,15 @@ object AgentLoop {
             }
         }
 
+        // 把 tail 真正送进对话。之前这里构造完就丢掉了：
+        // 收尾请求拿到的还是「任务进行中」的上下文，模型不知道轮数已耗尽，
+        // 于是继续声称「已完成」。追加成一条 system 消息才是有效约束。
+        msgs.put(
+            org.json.JSONObject()
+                .put("role", "system")
+                .put("content", tail)
+        )
+
         val finalMsg = callOnce(model, msgs, toolSchemas, temperature, maxTokens) ?: return null
         var text = finalMsg.optString("content").trim()
 

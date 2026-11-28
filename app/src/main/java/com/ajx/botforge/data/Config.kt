@@ -43,8 +43,11 @@ object Config {
                 Model(
                     id = SEED_MODEL_ID,
                     name = "主力模型",
-                    baseUrl = "http://127.0.0.1:7863/v1",
-                    apiKey = "dda44961e707cef6417ae8e53479c6e2",
+                    // 预置为空：不内置任何真实服务地址与密钥。
+                    // 之前这里写死过一个本地中转地址和一条真实 apiKey，
+                    // 会随开源一起泄露，且让用户误以为开箱即用。
+                    baseUrl = "",
+                    apiKey = "",
                     model = "deepseek-v4.1-flash",
                     type = "openai",
                     timeout = 120,
@@ -79,7 +82,8 @@ object Config {
                 Bot(
                     id = SEED_BOT_ID,
                     name = "BotForge",
-                    appId = "102082785",
+                    // 同理，不预置任何真实 AppID。
+                    appId = "",
                     // AppSecret 不入库：留空，首次启动后由用户在机器人页填写，
                     // 填完即加密存进 SecretStore（本机保险箱），不落明文。
                     appSecret = "",

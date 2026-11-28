@@ -1,5 +1,6 @@
 package com.ajx.botforge.ui.screens
 
+import com.ajx.botforge.qq.BotConnState
 import com.ajx.botforge.ui.text.Txt
 
 import androidx.compose.foundation.background
@@ -210,7 +211,7 @@ fun DashboardScreen(
                         name = bot.botName.ifEmpty { cfg?.name ?: "未命名" },
                         appId = cfg?.appId.orEmpty(),
                         tone = when {
-                            bot.state.name == "ONLINE" -> StatusTone.Success
+                            bot.state == BotConnState.CONNECTED -> StatusTone.Success
                             bot.state.name == "CONNECTING" || bot.state.name == "RECONNECTING" ->
                                 StatusTone.Warning
                             bot.lastError != null -> StatusTone.Danger
