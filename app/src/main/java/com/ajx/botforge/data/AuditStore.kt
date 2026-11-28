@@ -186,7 +186,11 @@ object AuditStore {
      */
     fun digestArgs(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
-        var s = raw
+        // 先落到非空局部变量：raw 是 String?，直接 `var s = raw` 会让 s
+        // 保持可空类型，后续 s.replace 全部报「可空接收者不允许调用」。
+        // 智能转换只对 val 或不再被改写的变量成立，所以这里显式取非空值。
+        val input: String = raw
+        var s: String = input
         // 1) key=value / "key": "value" 形式里的敏感字段
         val sensitive = listOf(
             "api[_-]?key", "apikey", "token", "secret", "password", "passwd",
