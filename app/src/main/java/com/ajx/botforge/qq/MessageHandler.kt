@@ -22,19 +22,9 @@ import com.ajx.botforge.plugin.PluginRunner
  */
 object MessageHandler {
 
-    private val handled = object : LinkedHashMap<String, Long>(400, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
-            size > 400
-    }
-    private val lastReply = mutableMapOf<String, Long>()
-    private val lock = Any()
-
     fun handle(ctx: Context, bot: Config.Bot, ev: BotClient.Event) {
-        val key = "${ev.scene}:${ev.messageId}"
-        synchronized(lock) {
-            if (handled.containsKey(key)) return
-            handled[key] = System.currentTimeMillis()
-        }
+        // 去重：同一 scene + messageId 只处理一次。状态与锁都在 CooldownGate 内。
+        if (CooldownGate.isDuplicate(ev.scene, ev.messageId)) return
 
         // 群策略
         var cooldown = 5
@@ -55,20 +45,11 @@ object MessageHandler {
             cooldown = g.cooldownSec
         }
 
-        // 冷却（同一会话内）
-        val sKey = "${bot.id}:${ev.scene}:${ev.groupOpenId ?: ev.userOpenId}"
-        synchronized(lock) {
-            val last = lastReply[sKey] ?: 0L
-            val now = System.currentTimeMillis()
-            if (now - last < cooldown * 1000L) {
-                Logger.i("Msg", "冷却中，跳过")
-                return
-            }
-            // 注意：这里只做检查，不占用冷却。
-            // 旧实现在此直接把 now 写入 lastReply，导致模型失败、图片加载失败、
-            // 图片消息被过滤等"没有真正回复"的情况也消耗了冷却窗口，
-            // 用户紧接着再发一句反而被静默丢弃。真正的占位在下方 markCooldown()。
-        }
+        // 冷却（同一会话内）。这里只做检查、不占用冷却窗口：
+        // 旧实现在此直接把 now 写入 lastReply，导致模型失败、图片加载失败、
+        // 图片消息被过滤等"没有真正回复"的情况也消耗了冷却窗口，
+        // 用户紧接着再发一句反而被静默丢弃。真正的占位在 markCooldown()。
+        if (CooldownGate.inCooldown(bot.id, ev, cooldown)) return
 
         // 指令
         val text = ev.content.trim()
@@ -236,7 +217,7 @@ object MessageHandler {
     }
 
     private fun reply(bot: Config.Bot, ev: BotClient.Event, text: String) {
-        val chunks = splitMessage(text)
+        val chunks = MessageSplitter.split(text)
         // 被动回复必须带上原消息 msg_id，且同一 msg_id 下的多条回复 msg_seq 需递增，
         // 否则平台会判定为重复或直接拒收
         var seq = 1
@@ -260,30 +241,7 @@ object MessageHandler {
 
     /** 记录该会话已回复，用于冷却判断 */
     private fun markCooldown(bot: Config.Bot, ev: BotClient.Event) {
-        val k = "${bot.id}:${ev.scene}:${ev.groupOpenId ?: ev.userOpenId}"
-        synchronized(lock) { lastReply[k] = System.currentTimeMillis() }
-    }
-
-    /** QQ 单条上限保守取 1200，按标点断句 */
-    fun splitMessage(text: String, limit: Int = 1200): List<String> {
-        if (text.length <= limit) return listOf(text)
-        val out = mutableListOf<String>()
-        var rest = text
-        while (rest.length > limit) {
-            var cut = -1
-            for (p in listOf("\n", "。", "！", "？", "；", " ")) {
-                val i = rest.lastIndexOf(p, limit)
-                if (i > limit / 3) {
-                    cut = i + 1
-                    break
-                }
-            }
-            if (cut <= 0) cut = limit
-            out.add(rest.substring(0, cut).trim())
-            rest = rest.substring(cut).trimStart()
-        }
-        if (rest.isNotEmpty()) out.add(rest)
-        return out
+        CooldownGate.markReplied(bot.id, ev)
     }
 
     // ------------------------------------------------------------ 内置指令
