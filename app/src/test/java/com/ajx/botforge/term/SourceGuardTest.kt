@@ -148,8 +148,13 @@ class SourceGuardTest {
      * 又连带删掉了原有函数的注解，报 `@Composable invocations can only
      * happen from the context of a @Composable function`。
      *
-     * 两次都只影响编译，不影响逻辑，但每次要等几分钟 CI 才知道。
+     * 两次都只影响编译、不影响逻辑，但每次要等几分钟 CI 才知道。
      * 这里用源码断言把它提前到单测阶段。
+     *
+     * 判定刻意保守：只认「大写的 Composable 函数名 + 左括号」这种确定形态，
+     * 加上 Column/Row/Box/Spacer 这类容器。
+     * 不要收 Text( —— 它在字符串字面量里太常见（"断线"/"断线文本" 等），
+     * 也不要用裸词匹配（HeroMetric 这种数据类会被误判）。
      */
     @Test
     fun `使用 Composable 的函数必须带 @Composable 注解`() {
@@ -159,17 +164,19 @@ class SourceGuardTest {
             "ui/components/Buttons.kt",
             "ui/components/Layout.kt"
         )
-        val composableCalls = listOf(
-            "Column(", "Row(", "Box(", "Text(", "Spacer(", "SmallButton(",
-            "SettingGroup", "SwitchRow(", "ActionRow(", "TrackSwitch(",
-            "PageTopBar(", "SettingDivider(", "SectionHeader("
+        // 只匹配「函数调用」形态：大写开头标识符紧跟左括号
+        val composableCall = Regex(
+            "\\b(Column|Row|Box|Spacer|Surface|LazyColumn|LazyRow|" +
+            "SettingGroup|ThemeRow|SwitchRow|ActionRow|TrackSwitch|" +
+            "PageTopBar|SettingDivider|SectionHeader|SmallButton|" +
+            "PrimaryButton|DangerButton|StatusHero|AttentionCard)\\s*\\("
         )
         files.forEach { rel ->
             val lines = read(rel).lines()
             lines.forEachIndexed { i, raw ->
-                val m = Regex("""^(?:private\s+)?fun\s+(\w+)""").find(raw) ?: return@forEachIndexed
+                val m = Regex("^(?:private\\s+)?fun\\s+(\\w+)").find(raw) ?: return@forEachIndexed
                 val name = m.groupValues[1]
-                // 函数体粗扫
+                // 粗扫函数体
                 var depth = 0
                 var started = false
                 var j = i + 1
@@ -180,10 +187,12 @@ class SourceGuardTest {
                     j++
                 }
                 val body = lines.subList(i + 1, minOf(j + 1, lines.size)).joinToString("\n")
-                val usesComposable = composableCalls.any { body.contains(it.trimEnd('(')) }
-                if (!usesComposable) return@forEachIndexed
+                // 去掉行注释与字符串字面量，避免 "断线" 之类被当成调用
+                val cleaned = body
+                    .replace(Regex("//[^\\n]*"), "")
+                    .replace(Regex("\"([^\"\\\\]|\\\\.)*\""), "\"\"")
+                if (!composableCall.containsMatchIn(cleaned)) return@forEachIndexed
 
-                // 往上找紧邻注解（跳过空行）
                 var k = i - 1
                 var ann: String? = null
                 while (k >= 0) {
