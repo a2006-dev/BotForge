@@ -350,7 +350,6 @@ fun SettingsScreen(
     }
 }
 
-@Composable
 /**
  * 主题选择行。
  *
