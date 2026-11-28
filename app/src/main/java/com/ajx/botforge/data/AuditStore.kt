@@ -191,10 +191,24 @@ object AuditStore {
         // 智能转换只对 val 或不再被改写的变量成立，所以这里显式取非空值。
         val input: String = raw
         var s: String = input
-        // 1) key=value / "key": "value" 形式里的敏感字段
+        // 1) Authorization 系头部是「方案名 + 空格 + 凭据」结构，值本身带空格。
+        //    通用字段规则只会吃掉方案名，凭据留在空格之后继续泄漏，
+        //    所以先用专门规则吃掉整段值；字段名和方案名保留，
+        //    审计才能看出「用了哪种认证方式」。
+        //    这条必须排在通用规则之前：通用规则会把值改写成 ***，
+        //    之后这里就再也认不出方案名了。
+        s = s.replace(
+            Regex("(?i)(\"?(?:proxy-)?authorization\"?\\s*[:=]\\s*\"?)((?:[A-Za-z][A-Za-z0-9._-]*\\s+)?)([^\"\\s,}]{4,})"),
+            "${'$'}1${'$'}2***"
+        )
+
+        // 2) key=value / "key": "value" 形式里的敏感字段
         val sensitive = listOf(
             "api[_-]?key", "apikey", "token", "secret", "password", "passwd",
-            "authorization", "cookie", "session[_-]?key"
+            // authorization 由上面的专门规则独占处理，不在这里重复：
+            // 重复会把专门规则刚保留下的方案名（Basic / Bearer）再抹一次，
+            // 审计就看不出用的是哪种认证方式了。
+            "cookie", "session[_-]?key"
         )
         // 不用 forEach { s = ... }：s 是被闭包捕获且会被改写的局部变量，
         // Kotlin 因此无法对 s 做智能转换（编译报 Smart cast is impossible）。
@@ -206,11 +220,11 @@ object AuditStore {
                 "${'$'}1***"
             )
         }
-        // 2) 常见 token 前缀直接抹掉
+        // 3) 常见 token 前缀直接抹掉
         s = s.replace(Regex("ghp_[A-Za-z0-9]{20,}"), "ghp_***")
         s = s.replace(Regex("sk-[A-Za-z0-9]{20,}"), "sk-***")
         s = s.replace(Regex("Bearer\\s+[A-Za-z0-9._-]{16,}"), "Bearer ***")
-        // 3) 压掉换行并截断
+        // 4) 压掉换行并截断
         s = s.replace(Regex("\\s+"), " ").trim()
         return if (s.length <= ARGS_MAX) s else s.take(ARGS_MAX) + "…"
     }
