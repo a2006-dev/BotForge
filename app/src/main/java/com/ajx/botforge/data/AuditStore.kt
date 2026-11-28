@@ -192,7 +192,10 @@ object AuditStore {
             "api[_-]?key", "apikey", "token", "secret", "password", "passwd",
             "authorization", "cookie", "session[_-]?key"
         )
-        sensitive.forEach { k ->
+        // 不用 forEach { s = ... }：s 是被闭包捕获且会被改写的局部变量，
+        // Kotlin 因此无法对 s 做智能转换（编译报 Smart cast is impossible）。
+        // 普通 for 循环里改的是同一个局部变量，类型仍然确定。
+        for (k in sensitive) {
             s = s.replace(
                 Regex("(?i)(\"?$k\"?\\s*[:=]\\s*\"?)([^\"\\s,}]{4,})"),
                 // 用 ${'$'}1 而不是 $1：Kotlin 字符串里 $1 会被当作模板起始
