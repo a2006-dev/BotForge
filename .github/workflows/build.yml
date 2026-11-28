@@ -70,15 +70,20 @@ jobs:
           gradle :app:testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee test.log
           exit ${PIPESTATUS[0]}
 
+      # continue-on-error 曾让编译失败也显示 ✓：
+      # 整步永久为真，等于没有信号，问题只能等装包时才发现。
+      # 现在 debug 编译失败就是失败——这是装机走的那条路径。
       - name: Build debug
         run: |
           gradle :app:assembleDebug --stacktrace --no-daemon 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
-        continue-on-error: true
 
+      # release 仍允许失败：未配置签名密钥时 assembleRelease 必然失败，
+      # 那种情况下 debug 产物依然可装机。这里用 `|| true` 表达「可选」，
+      # 而不是 continue-on-error —— 后者会让步骤本身显示成功。
       - name: Build release
         run: |
-          gradle :app:assembleRelease --stacktrace --no-daemon 2>&1 | tee release.log || echo "release 失败，仅产出 debug"
+          gradle :app:assembleRelease --stacktrace --no-daemon 2>&1 | tee release.log || echo "release 失败（可能未配置签名），仅产出 debug"
 
       - name: Report build log to paste
         if: always()
