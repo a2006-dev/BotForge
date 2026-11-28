@@ -59,7 +59,9 @@ fun SettingsScreen(
     onApplyShizuku: () -> Unit,
     onReloadBots: () -> Unit,
     onOpenTerminal: () -> Unit = {},
-    onOpenToolPackages: () -> Unit = {}
+    onOpenToolPackages: () -> Unit = {},
+    onOpenTestChat: () -> Unit = {},
+    onOpenMemory: () -> Unit = {}
 ) {
     val c = botColors
     val themeMode by UiPrefs.themeMode.collectAsState()
@@ -274,6 +276,33 @@ fun SettingsScreen(
                     }
                 }
                 SettingDivider()
+                // 试聊入口。放在「工具调用」区块内，因为它的用途就是验证工具调用：
+                // 用户调工具出问题时，第一反应是打开工具相关设置，出口应当在这里，
+                // 而不是首页那一排「人设/模型/插件」的通用导航里。
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenTestChat)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "试聊（测试工具调用）",
+                            color = c.textHigh,
+                            fontSize = FontSize.body,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "选人设 + 模型直接对话，看每次工具调用的入参、结果与耗时。" +
+                                "不需要配置 QQ 机器人。工具会真实执行。",
+                            color = c.textLow,
+                            fontSize = FontSize.caption
+                        )
+                    }
+                    SmallButton(text = "试聊", onClick = onOpenTestChat)
+                }
+                SettingDivider()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -309,6 +338,16 @@ fun SettingsScreen(
                         }
                     )
                 }
+            }
+
+            SectionHeader("记忆")
+            SettingGroup {
+                ActionRow(
+                    title = Txt.TITLE_MEMORY,
+                    desc = "按会话查看本地记忆占用、轮数与最近对话",
+                    action = "管理",
+                    onClick = onOpenMemory
+                )
             }
 
             SectionHeader("保活与权限")

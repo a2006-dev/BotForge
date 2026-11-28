@@ -26,6 +26,15 @@ object Routes {
     const val TOOLS = "tools"
     /** 工具包权限管理：包开关与单工具 ALLOW/ASK/DENY。 */
     const val TOOL_PACKAGES = "tools/packages"
+    /** 记忆管理：按会话列出本地记忆文件、预览与清理。 */
+    const val MEMORY = "memory"
+
+    /**
+     * 应用内试聊页：选定人设 + 模型 + 是否带工具，直接在 App 内测试对话与工具调用。
+     *
+     * 不需要配置 QQ 机器人，也不需要切出 App。
+     */
+    const val TEST_CHAT = "tools/test_chat"
 
     /** 带机器人 id 的编辑页路由，id 为空表示新建。 */
     fun botEdit(id: String? = null): String =

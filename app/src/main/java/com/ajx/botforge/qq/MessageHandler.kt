@@ -377,12 +377,48 @@ object MessageHandler {
         }
     }
 
-    /** 判断本次对话是否允许模型调用工具（L2 安全闸门） */
+    /**
+     * 判断本次对话是否允许模型调用工具（L2 安全闸门）。
+     *
+     * 私聊：沿用插件白名单——能被允许跑插件的人，才允许让 AI 调工具。
+     *
+     * 群聊：**两条闸门必须同时通过，缺一不可**。
+     *
+     * 为什么不能只靠 PluginGuard.check：
+     * 它的群聊分支只判「这个群」，完全不判「说话的人是谁」——
+     * groupEnabled 已开 + 本群在白名单，它就返回 null 放行，
+     * 哪怕发消息的是个刚进群的陌生人。若直接拿它当群聊的工具开关，
+     * 等于把主人的手机 shell 敞开给整个群：任何人说一句话，
+     * 模型就能在他那句话上下文中跑 run_command。
+     * 所以群聊必须再叠一层身份校验。
+     *
+     * 为什么用 AuthStore.isPrivileged：
+     * 它把「主人」和「本群管理员」都算作特权（level >= ADMIN），
+     * 管理员支持按群授权（scope = 群 openid），所以想让某个群里的
+     * 某个人临时能用工具，只授权那一个群即可，不用给全局权限。
+     *
+     * 行为结论：群聊工具不是「默认放开」，而是「白名单群 + 特权人」双开才可用。
+     * 没有主人/管理员发言的群里，工具仍然一律不可用；群聊插件未开启、
+     * 本群不在群白名单、发言人只是普通群成员——任一条件不满足即拒绝。
+     */
     private fun botAllowedTools(bot: Config.Bot, ev: BotClient.Event): Boolean {
-        // 群聊里模型不能自主执行工具，只允许私聊
-        if (ev.scene != "c2c") return false
-        // 复用插件白名单：能被允许跑插件的人，才允许让 AI 调工具
-        return PluginGuard.check(ev.scene, ev.userOpenId, ev.groupOpenId) == null
+        if (ev.scene == "c2c") {
+            // 主人天然放行，不需要先把自己加进白名单。
+            // 白名单的语义是「授权别人」不是「授权自己」；旧实现混为一谈，
+            // 导致绑定主人后仍要 /allow，否则连自己都用不了。
+            // 这条只留在工具链路，不碰 handlePlugin 的白名单校验。
+            if (AuthStore.isOwnerOnly(ev.userOpenId)) return true
+            // 非主人：复用插件白名单
+            return PluginGuard.check(ev.scene, ev.userOpenId, ev.groupOpenId) == null
+        }
+        if (ev.scene == "group") {
+            // 闸门一：群维度——群聊插件已开启 且 本群在群白名单里（只判群，不判人）
+            if (PluginGuard.check(ev.scene, ev.userOpenId, ev.groupOpenId) != null) return false
+            // 闸门二：人维度——发言人必须是主人或本群管理员
+            return AuthStore.isPrivileged(ev.userOpenId, ev.groupOpenId)
+        }
+        // 其它未知场景：默认拒绝，不做任何猜测性放行
+        return false
     }
 
     /**

@@ -542,4 +542,102 @@ object Txt {
     const val MP_POOL_RESET = "重置池状态"
     const val MP_POOL_HINT = "请求失败时会按顺序自动尝试下一条，成功即返回。"
     const val MP_COPIED = "已复制"
+
+    // ==================== 记忆管理（任务书 3.3.4） ====================
+
+    /** 记忆管理页副标题 */
+    const val MEM_SUBTITLE = "本地对话记忆与会话占用"
+
+    /** 顶栏刷新按钮 */
+    const val MEM_REFRESH = "刷新"
+
+    /** 空态标题：一个会话文件都没有 */
+    const val MEM_EMPTY_TITLE = "暂无本地记忆"
+
+    /** 空态说明：讲清什么时候才会产生记忆文件 */
+    const val MEM_EMPTY_DESC = "机器人收到消息并开启记忆后，这里会按会话列出对话记录"
+
+    /**
+     * 概览第一行：会话数 · 总轮数 · 总占用。
+     *
+     * 用非定位格式符（%d/%s）而非 %1$d：Kotlin 字符串模板把 `$` 当插值起始，
+     * 写成 %1$d 时 `$d` 会被解析成变量引用，直接编译不过。
+     * 仓库既有文案（如 DASH_PARTIAL）同样只用非定位符。
+     */
+    const val MEM_SUMMARY_FMT = "%d 个会话 · 共 %d 轮 · %s"
+
+    /** 概览第二行：累计 %d 条消息 */
+    const val MEM_SUMMARY_SUB_FMT = "累计 %d 条消息"
+
+    /** 单个机器人下的会话数 */
+    const val MEM_BOT_COUNT_FMT = "%d 个会话"
+
+    /** 场景：群聊 */
+    const val MEM_SCENE_GROUP = "群聊"
+
+    /** 场景：私聊 */
+    const val MEM_SCENE_C2C = "私聊"
+
+    /** 展开预览 */
+    const val MEM_EXPAND = "预览"
+
+    /** 收起预览 */
+    const val MEM_COLLAPSE = "收起"
+
+    /** 会话元信息一行：轮数 · 条数 · 占用 */
+    const val MEM_ROW_META_FMT = "%d 轮 · %d 条 · %s"
+
+    /** 最后更新时间前缀 */
+    const val MEM_LAST_UPDATED_FMT = "最后更新 %s"
+
+    /** 存储键标签 */
+    const val MEM_KEY_LABEL = "存储键"
+
+    /** 预览为空 */
+    const val MEM_PREVIEW_EMPTY = "该会话尚无对话记录"
+
+    /** 预览里的用户角色 */
+    const val MEM_ROLE_USER = "用户"
+
+    /** 预览里的机器人角色 */
+    const val MEM_ROLE_BOT = "机器人"
+
+    /** 单会话清空按钮 */
+    const val MEM_CLEAR_ONE = "清空该会话"
+
+    /** 单会话清空后果 */
+    const val MEM_CLEAR_ONE_DESC = "该会话的全部本地对话记忆会被删除，模型将不再记得此前聊过什么。删除后无法恢复。"
+
+    /** 事实行：机器人 */
+    const val MEM_FACT_BOT = "机器人"
+
+    /** 事实行：会话对象 */
+    const val MEM_FACT_PEER = "会话对象"
+
+    /** 事实行：将失去多少轮 / 多少条 / 多少空间 */
+    const val MEM_FACT_LOST_FMT = "将失去 %d 轮对话、%d 条消息，释放 %s"
+
+    /** 全部清空按钮 */
+    const val MEM_CLEAR_ALL = "清空全部记忆"
+
+    /** 全部清空后果 */
+    const val MEM_CLEAR_ALL_DESC = "所有机器人的全部本地对话记忆都会被删除。机器人配置、人设、群白名单不受影响，但每段对话的上下文将从零开始。"
+
+    /** 全部清空的核对词。用固定短词而非名称：清的是「全部」，没有单一对象名可核对 */
+    const val MEM_CLEAR_ALL_WORD = "清空全部"
+
+    /** 事实行：涉及 %d 个会话 */
+    const val MEM_FACT_ALL_SESSIONS_FMT = "涉及 %d 个会话"
+
+    /** 事实行：共 %d 轮 */
+    const val MEM_FACT_ALL_ROUNDS_FMT = "共 %d 轮对话"
+
+    /** 事实行：占用 %s */
+    const val MEM_FACT_ALL_SIZE_FMT = "共占用 %s"
+
+    /** 事实行：影响范围 */
+    const val MEM_FACT_ALL_SCOPE = "影响范围：本机全部机器人与全部群聊、私聊会话"
+
+    /** 底部提示：保留上限 */
+    const val MEM_LIMIT_HINT = "每个会话最多保留最近 120 条消息，超出后最早的记录被自动丢弃。清空只删本地记忆文件，不影响机器人配置与人设。"
 }

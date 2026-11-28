@@ -13,6 +13,7 @@ import com.ajx.botforge.ui.screens.BotListScreen
 import com.ajx.botforge.ui.screens.DashboardScreen
 import com.ajx.botforge.ui.screens.GroupListScreen
 import com.ajx.botforge.ui.screens.LogScreen
+import com.ajx.botforge.ui.screens.MemoryScreen
 import com.ajx.botforge.ui.screens.ModelEditScreen
 import com.ajx.botforge.ui.screens.ModelListScreen
 import com.ajx.botforge.ui.screens.PersonaEditScreen
@@ -21,6 +22,7 @@ import com.ajx.botforge.ui.screens.PermissionsScreen
 import com.ajx.botforge.ui.screens.PluginScreen
 import com.ajx.botforge.ui.screens.SettingsScreen
 import com.ajx.botforge.ui.screens.TerminalScreen
+import com.ajx.botforge.ui.screens.TestChatScreen
 import com.ajx.botforge.ui.screens.ToolPackageScreen
 import com.ajx.botforge.ui.screens.ToolScreen
 
@@ -156,6 +158,8 @@ fun AppNavHost(
                 onApplyShizuku = onApplyShizuku,
                 onReloadBots = onReloadBots,
                 onOpenToolPackages = { navController.navigate(Routes.TOOL_PACKAGES) },
+                onOpenTestChat = { navController.navigate(Routes.TEST_CHAT) },
+                onOpenMemory = { navController.navigate(Routes.MEMORY) },
                 // 设置页的「终端环境 → 配置/重装」跳这里。
                 // 之前漏传此参数，走的是默认空 lambda，点击毫无反应。
                 onOpenTerminal = { navController.navigate(Routes.TERMINAL) }
@@ -180,6 +184,14 @@ fun AppNavHost(
         }
         composable(Routes.TOOL_PACKAGES) {
             ToolPackageScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.TEST_CHAT) {
+            TestChatScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.MEMORY) {
+            MemoryScreen(onBack = { navController.popBackStack() })
         }
     }
 }

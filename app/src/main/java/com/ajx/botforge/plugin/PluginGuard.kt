@@ -88,6 +88,9 @@ object PluginGuard {
             val groups = allowedGroups()
             if (groups.isEmpty()) return "未配置允许的群"
             if (!groups.contains(groupOpenId)) return "本群不在插件白名单里"
+            // 群在名单里只说明「这个群允许跑插件」，不代表「群里任何人都能触发」。
+            // 发言者还必须是主人或本群管理员，这条由调用方（botAllowedTools）用
+            // 由调用方（botAllowedTools）再叠一层发言者身份判定。
             return null
         }
 
