@@ -1,5 +1,6 @@
 package com.ajx.botforge.ai.tool
 
+import com.ajx.botforge.data.AuditStore
 import com.ajx.botforge.data.Logger
 import org.json.JSONObject
 
@@ -48,6 +49,23 @@ object ToolExecutor {
         override fun run(args: JSONObject): ToolResult {
             val who = "${pkg.displayName} / ${def.tool.name}"
             Logger.w("ToolExec", "拒绝执行 ASK 档工具: $who")
+            // 拦截也是决策，必须留痕：用户排查「为什么模型说没权限」时，
+            // 这里能直接告诉他「是你的设置挡的，不是模型不行」。
+            AuditStore.record(
+                AuditStore.AuditRecord(
+                    timestamp = System.currentTimeMillis(),
+                    botId = "",
+                    scene = "internal",
+                    userOpenId = null,
+                    packageId = pkg.id,
+                    toolOrCmd = def.tool.name,
+                    argsDigest = AuditStore.digestArgs(args.toString()),
+                    decision = AuditStore.Decision.BLOCKED,
+                    exitCode = null,
+                    durationMs = 0,
+                    error = "ASK 档未授权"
+                )
+            )
             return ToolResult.fail(
                 "工具「${def.tool.name}」未获授权，已被拦截。",
                 buildString {

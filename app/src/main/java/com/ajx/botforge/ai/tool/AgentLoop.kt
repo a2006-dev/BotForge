@@ -1,5 +1,6 @@
 package com.ajx.botforge.ai.tool
 
+import com.ajx.botforge.data.AuditStore
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
 import org.json.JSONArray
@@ -32,6 +33,20 @@ object AgentLoop {
         val text: String,
         /** 本次实际调用过的工具名，用于审计 */
         val usedTools: List<String>
+    )
+
+    /**
+     * 审计上下文。
+     *
+     * AgentLoop 不关心「谁在什么场景下问的」，那是上一层的事。
+     * 但审计必须带上这些字段才有意义：只记「调了 shell」而不知道
+     * 是哪个群哪个人触发的，等于没记。
+     * 所以由调用方传入，这里只负责透传给 [AuditStore]。
+     */
+    data class AuditContext(
+        val botId: String = "",
+        val scene: String = "internal",
+        val userOpenId: String? = null
     )
 
     // ------------------------------------------------------------ 防编造模式
@@ -101,7 +116,8 @@ object AgentLoop {
         temperature: Float,
         maxTokens: Int,
         tools: List<Tool>,
-        onToolCall: ((String, JSONObject) -> Unit)? = null
+        onToolCall: ((String, JSONObject) -> Unit)? = null,
+        auditCtx: AuditContext = AuditContext()
     ): RunResult? {
         // anthropic 协议暂不支持工具，退回纯对话
         if (model.type == "anthropic" || tools.isEmpty()) {
@@ -178,11 +194,33 @@ object AgentLoop {
                     used.add(name)
                     onToolCall?.invoke(name, argsObj)
                     Logger.i("Agent", "调用工具 $name(${rawArgs.take(120)})")
+                    val t0 = System.currentTimeMillis()
+                    var res: ToolResult? = null
                     try {
-                        tool.run(argsObj)
+                        res = tool.run(argsObj)
+                        res
                     } catch (e: Throwable) {
                         Logger.w("Agent", "工具 $name 抛异常: ${e.message}")
                         ToolResult.fail("${e.javaClass.simpleName}: ${e.message ?: "无详情"}")
+                    } finally {
+                        // 无论成功、失败还是抛异常，都落一条审计。
+                        // 「失败了但没记录」是排查时最难受的情况：
+                        // 用户记得模型试过某个工具，日志里却什么都没有。
+                        AuditStore.record(
+                            AuditStore.AuditRecord(
+                                timestamp = t0,
+                                botId = auditCtx.botId,
+                                scene = auditCtx.scene,
+                                userOpenId = auditCtx.userOpenId,
+                                packageId = null,
+                                toolOrCmd = name,
+                                argsDigest = AuditStore.digestArgs(rawArgs),
+                                decision = AuditStore.Decision.ALLOW,
+                                exitCode = null,
+                                durationMs = System.currentTimeMillis() - t0,
+                                error = res?.error?.takeIf { it.isNotBlank() }
+                            )
+                        )
                     }
                 }
                 lastFailed = !result.success
