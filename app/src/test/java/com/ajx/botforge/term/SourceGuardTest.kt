@@ -138,4 +138,67 @@ class SourceGuardTest {
             !hidden.contains("const val END_PREFIX")
         )
     }
+
+    /**
+     * Compose 注解守卫。
+     *
+     * 这个坑在 1.8.8 上连续踩了两次：往 SettingsScreen 里插新 Composable 时，
+     * 插入点带着 `@Composable` 前缀，结果出现「注解 + 注释 + 注解」，
+     * 编译器报 `This annotation is not repeatable`；把多的那个删掉，
+     * 又连带删掉了原有函数的注解，报 `@Composable invocations can only
+     * happen from the context of a @Composable function`。
+     *
+     * 两次都只影响编译，不影响逻辑，但每次要等几分钟 CI 才知道。
+     * 这里用源码断言把它提前到单测阶段。
+     */
+    @Test
+    fun `使用 Composable 的函数必须带 @Composable 注解`() {
+        val files = listOf(
+            "ui/screens/SettingsScreen.kt",
+            "ui/screens/DashboardScreen.kt",
+            "ui/components/Buttons.kt",
+            "ui/components/Layout.kt"
+        )
+        val composableCalls = listOf(
+            "Column(", "Row(", "Box(", "Text(", "Spacer(", "SmallButton(",
+            "SettingGroup", "SwitchRow(", "ActionRow(", "TrackSwitch(",
+            "PageTopBar(", "SettingDivider(", "SectionHeader("
+        )
+        files.forEach { rel ->
+            val lines = read(rel).lines()
+            lines.forEachIndexed { i, raw ->
+                val m = Regex("""^(?:private\s+)?fun\s+(\w+)""").find(raw) ?: return@forEachIndexed
+                val name = m.groupValues[1]
+                // 函数体粗扫
+                var depth = 0
+                var started = false
+                var j = i + 1
+                while (j < lines.size) {
+                    depth += lines[j].count { it == '{' } - lines[j].count { it == '}' }
+                    if (lines[j].contains('{')) started = true
+                    if (started && depth <= 0) break
+                    j++
+                }
+                val body = lines.subList(i + 1, minOf(j + 1, lines.size)).joinToString("\n")
+                val usesComposable = composableCalls.any { body.contains(it.trimEnd('(')) }
+                if (!usesComposable) return@forEachIndexed
+
+                // 往上找紧邻注解（跳过空行）
+                var k = i - 1
+                var ann: String? = null
+                while (k >= 0) {
+                    val t = lines[k].trim()
+                    if (t.isEmpty()) { k--; continue }
+                    ann = t
+                    break
+                }
+                assertEquals(
+                    "$rel:${i + 1} 函数 $name 调用了 Composable 却没有 @Composable 注解" +
+                        "（上一行是 ${ann ?: "文件开头"}）",
+                    "@Composable",
+                    ann
+                )
+            }
+        }
+    }
 }

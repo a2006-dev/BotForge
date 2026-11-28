@@ -388,6 +388,7 @@ private fun ThemeRow(current: ThemeMode, onPick: (ThemeMode) -> Unit) {
     }
 }
 
+@Composable
 private fun SettingGroup(content: @Composable () -> Unit) {
     val c = botColors
     Column(
