@@ -112,8 +112,13 @@ object BfpackImporter {
             val json = runCatching { JSONObject(mf.readText()) }
                 .getOrElse { return failed("plugin.json 不是合法 JSON：${it.message}") }
 
-            val manifest = runCatching { PluginManifest.parse(json, staging) }
-                .getOrElse { return failed("manifest 字段不完整：${it.message}") }
+            // parse() 用 **null** 表示失败，不是抛异常，所以不能用 getOrElse
+            // 兜底——那样只能接住真正抛出的异常，null 会直接漏到下一行，
+            // 然后在 manifest.api 处编译失败（可空接收者）。
+            val parsed = runCatching { PluginManifest.parse(json, staging) }
+                .getOrElse { return failed("解析 plugin.json 时出错：${it.message}") }
+            val manifest = parsed
+                ?: return failed("manifest 字段不完整：缺少 id 或 commands，或 commands 全为空")
 
             val warnings = mutableListOf<String>()
 
@@ -185,12 +190,24 @@ object BfpackImporter {
 
             val json = runCatching { JSONObject(mf.readText()) }
                 .getOrElse { return "plugin.json 不是合法 JSON：${it.message}" }
-            val manifest = runCatching { PluginManifest.parse(json, staging) }
-                .getOrElse { return "manifest 字段不完整：${it.message}" }
+            val parsed = runCatching { PluginManifest.parse(json, staging) }
+                .getOrElse { return "解析 plugin.json 时出错：${it.message}" }
+            val manifest = parsed
+                ?: return "manifest 字段不完整：缺少 id 或 commands，或 commands 全为空"
 
             // 防替换：用户在确认页看到的是 A，装的必须是 A
             if (manifest.id != expectedId) {
                 return "包内容已变化（期望 $expectedId，实际 ${manifest.id}），请重新选择文件。"
+            }
+
+            // 必须校验 id 才能拿它拼路径。
+            // parse() 只保证 id 非空，不校验字符——`../evil`、`a/b`、`x y`
+            // 都能过 parse（它只做了 trim + isEmpty 检查）。
+            // 不校验就直接 File(targetRoot, manifest.id)，等于把上面
+            // 好不容易挡住 disable 的 zip 路径穿越又从 manifest 开了一个口子。
+            // 这里的规则与 uninstall() 完全一致，两处不能各写一套。
+            if (!isSafePackageId(manifest.id)) {
+                return "包 id 非法（${manifest.id}）：不能包含路径分隔符或 .."
             }
 
             val dest = File(targetRoot, manifest.id)
@@ -226,7 +243,7 @@ object BfpackImporter {
      * 两套体系独立，跨层删除会制造隐式耦合。调用方需要时自己清。
      */
     fun uninstall(targetRoot: File, packageId: String): String? {
-        if (packageId.isBlank() || packageId.contains('/') || packageId.contains("..")) {
+        if (!isSafePackageId(packageId)) {
             return "非法的包 id：$packageId"
         }
         val d = File(targetRoot, packageId)
@@ -299,6 +316,24 @@ object BfpackImporter {
             }
         }
         return total to count
+    }
+
+    /**
+     * 包 id 是否可安全地拼进路径。
+     *
+     * `commit()` 与 `uninstall()` 都要拿 id 去 `File(root, id)`，
+     * 两处必须用同一套规则——之前只在 uninstall 里校验，commit 漏了，
+     * 等于「装的时候能穿出去、卸的时候反而拦住」，是把校验放错了边。
+     *
+     * 规则比 zip 条目更严：还禁了反斜杠与空串。
+     * id 本来就该是 `com.example.hello` 这种反向域名，不该出现路径字符。
+     */
+    private fun isSafePackageId(id: String): Boolean {
+        if (id.isBlank()) return false
+        if (id.contains('/') || id.contains('\\')) return false
+        if (id.contains("..")) return false
+        if (id.startsWith(".")) return false
+        return true
     }
 
     /**
