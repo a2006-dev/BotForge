@@ -25,7 +25,8 @@ import androidx.compose.ui.graphics.Color
  * 迁移只是把首字母改小写 + 加 c. 前缀，不改变任何设计决策。
  *
  * 硬性规则（设计规范 §1）：
- *  - 页面不得再 import Color.kt 里的具体色值常量；
+ *  - 页面一律通过 [botColors] 取色，不得再直接写 `Color(0xFF...)` 或常量名；
+ *    （旧 Color.kt 的编译期常量已全部迁入本文件的 Dark/Light 两套，文件已删除）
  *  - 需要新颜色时先问「能不能复用已有角色」，不能才加字段，并同时补齐亮暗两套。
  */
 @Immutable

@@ -37,7 +37,6 @@ import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.TextHigh
 import com.ajx.botforge.ui.theme.botColors
 
 /**
@@ -320,7 +319,8 @@ fun InfoRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-        valueColor: androidx.compose.ui.graphics.Color = TextHigh,
+        // null = 跟随主题正文前景色，避免浅色主题下仍是深色方案的浅灰字
+        valueColor: androidx.compose.ui.graphics.Color? = null,
     mono: Boolean = false
 ) {
     val c = botColors
@@ -339,7 +339,7 @@ fun InfoRow(
         Spacer(Modifier.width(Spacing.sm))
         Text(
             text = value,
-            color = valueColor,
+            color = valueColor ?: c.textHigh,
             fontSize = if (mono) FontSize.small else FontSize.body,
             fontFamily = if (mono) androidx.compose.ui.text.font.FontFamily.Monospace else null,
             modifier = Modifier.weight(1f)

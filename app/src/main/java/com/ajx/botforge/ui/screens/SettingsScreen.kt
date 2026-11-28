@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +39,9 @@ import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Radius
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
+import com.ajx.botforge.ui.theme.ThemeMode
 import com.ajx.botforge.ui.theme.botColors
+import com.ajx.botforge.ui.data.UiPrefs
 import com.ajx.botforge.ui.text.Txt
 
 /**
@@ -59,6 +62,7 @@ fun SettingsScreen(
     onOpenToolPackages: () -> Unit = {}
 ) {
     val c = botColors
+    val themeMode by UiPrefs.themeMode.collectAsState()
     var autoStart by remember { mutableStateOf(true) }
     var keepAlive by remember { mutableStateOf(true) }
     var autoRestart by remember { mutableStateOf(true) }
@@ -97,6 +101,11 @@ fun SettingsScreen(
                 .padding(Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
+            SectionHeader("外观")
+            SettingGroup {
+                ThemeRow(current = themeMode) { UiPrefs.setThemeMode(it) }
+            }
+
             SectionHeader("运行")
             SettingGroup {
                 SwitchRow(
@@ -342,6 +351,44 @@ fun SettingsScreen(
 }
 
 @Composable
+/**
+ * 主题选择行。
+ *
+ * 三态而不是开关：用户需要「跟随系统」这一档，Boolean 表达不了。
+ * 选中项用 primary 样式强调，未选中保持次级底色。
+ */
+@Composable
+private fun ThemeRow(current: ThemeMode, onPick: (ThemeMode) -> Unit) {
+    val c = botColors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = Spacing.md)
+    ) {
+        Text(
+            text = "主题",
+            color = c.textHigh,
+            fontSize = FontSize.body,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            text = "跟随系统会随系统明暗自动切换",
+            color = c.textLow,
+            fontSize = FontSize.caption
+        )
+        Spacer(Modifier.height(Spacing.sm))
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            ThemeMode.entries.forEach { m ->
+                SmallButton(
+                    text = m.label,
+                    primary = m == current,
+                    onClick = { onPick(m) }
+                )
+            }
+        }
+    }
+}
+
 private fun SettingGroup(content: @Composable () -> Unit) {
     val c = botColors
     Column(

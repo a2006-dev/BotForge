@@ -9,12 +9,15 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.ajx.botforge.data.Config
 import com.ajx.botforge.data.Logger
 import com.ajx.botforge.permission.PermissionGuide
 import com.ajx.botforge.qq.BotManager
 import com.ajx.botforge.service.BotService
 import com.ajx.botforge.service.ShizukuKeepAlive
+import com.ajx.botforge.ui.data.UiPrefs
 import com.ajx.botforge.ui.navigation.AppNavHost
 import com.ajx.botforge.ui.theme.BotForgeTheme
 
@@ -49,7 +52,12 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            BotForgeTheme {
+            // 主题模式来自 UiPrefs（由 App 启动时从磁盘灌入）。
+            // 这里必须订阅 StateFlow 而不是读一次 Config.themeMode：
+            // 设置页改主题时只更新 UiPrefs，根节点订阅了才会立即重组，
+            // 否则要杀进程重进才生效。
+            val themeMode by UiPrefs.themeMode.collectAsState()
+            BotForgeTheme(themeMode = themeMode) {
                 AppNavHost(
                     onRequestBattery = { native.requestBatteryWhitelist() },
                     onRequestOverlay = { native.requestOverlay() },

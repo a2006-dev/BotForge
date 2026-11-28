@@ -29,8 +29,6 @@ import com.ajx.botforge.ui.theme.ButtonShape
 import com.ajx.botforge.ui.theme.FontSize
 import com.ajx.botforge.ui.theme.Sizes
 import com.ajx.botforge.ui.theme.Spacing
-import com.ajx.botforge.ui.theme.Brand
-import com.ajx.botforge.ui.theme.TextHigh
 import com.ajx.botforge.ui.theme.botColors
 
 /**
@@ -251,7 +249,9 @@ fun SmallButton(
 fun TextButton(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = Brand,
+    // 不写死 Color.kt 的 Brand 常量：那是编译期常量，浅色主题下不会变。
+    // null 表示"用当前主题的品牌色"，由函数体在 Composable 作用域里取。
+    color: Color? = null,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
@@ -265,7 +265,7 @@ fun TextButton(
     ) {
         Text(
             text = text,
-            color = if (enabled) color else c.textLow,
+            color = if (enabled) (color ?: c.brand) else c.textLow,
             fontSize = FontSize.body,
             fontWeight = FontWeight.Medium
         )
@@ -280,7 +280,8 @@ fun IconTextButton(
     icon: ImageVector,
     contentDescription: String,
     modifier: Modifier = Modifier,
-    tint: Color = TextHigh,
+    // 同上：null = 跟随主题的正文前景色
+    tint: Color? = null,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
@@ -295,7 +296,7 @@ fun IconTextButton(
             imageVector = icon,
             contentDescription = contentDescription,
             modifier = Modifier.size(Sizes.iconLarge),
-            tint = if (enabled) tint else c.textLow
+            tint = if (enabled) (tint ?: c.textHigh) else c.textLow
         )
     }
 }
