@@ -65,10 +65,24 @@ jobs:
             echo "keystore.properties written"
           fi
 
+      # 失败时必须给出原因：原实现只 tee 到 test.log 就 exit，
+      # 而 test.log 既不上传也不打印，于是「单测挂了」永远查不到是哪一条，
+      # 只能靠猜。这段把失败行切成 annotation，直接显示在 run 页面上。
       - name: Unit tests
         run: |
+          set +e
           gradle :app:testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee test.log
-          exit ${PIPESTATUS[0]}
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::单元测试失败（exit $rc），以下摘录 test.log 关键行"
+            grep -E "^(e: |FAILURE:|Execution failed|Caused by|\* What went wrong)|[0-9]+ tests? completed|FAILED$" test.log \
+              | head -40 | while IFS= read -r line; do
+                echo "::error title=test::$(printf '%s' "$line" | head -c 900)"
+              done
+            echo "----- test.log 末尾 40 行 -----"
+            tail -n 40 test.log
+          fi
+          exit $rc
 
       # continue-on-error 曾让编译失败也显示 ✓：
       # 整步永久为真，等于没有信号，问题只能等装包时才发现。
@@ -112,6 +126,7 @@ jobs:
           path: |
             build.log
             release.log
+            test.log
           retention-days: 7
 
       - name: Collect APKs
