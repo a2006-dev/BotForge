@@ -168,10 +168,10 @@ fun MemoryScreen(onBack: () -> Unit) {
                     .toList()
                     .sortedBy { (_, list) -> list.first().botName }
 
-                for (entry in grouped) {
+                for ((_, list) in grouped) {
                     BotGroupSection(
-                        botName = entry.value.first().botName,
-                        sessions = entry.value,
+                        botName = list.first().botName,
+                        sessions = list,
                         expandedKey = expandedKey,
                         previews = previews,
                         previewLoading = previewLoading,
