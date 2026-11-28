@@ -50,11 +50,15 @@ object BuiltinPackages {
     /**
      * 系统包。
      *
-     * system_command 借 Shizuku 拿 shell:2000，能 am start、改设置、模拟点击，
-     * 是全应用权限最高的能力。但这里默认仍是 ALLOW —— 理由见 [ToolPermission.ASK]：
-     * 设置页 UI 还没做，用户此刻没有任何入口把 ASK 改成 ALLOW，
-     * 那样等于直接把这个功能关死，属于退步。
-     * 等设置页能改权限了，再把默认收紧到 ASK 才有意义。
+     * system_command 借 Shizuku 拿 shell:2000，能 am start、改设置、模拟点击、
+     * 读取屏幕内容，是全应用权限最高的能力。
+     *
+     * 默认收紧为 ASK：模型仍可见、可尝试调用，但会被 [ToolExecutor] 的守卫
+     * 拦下并收到「需先在设置里授权」的结构化提示，不会真的执行。
+     * 用户可在 设置 → 工具包与权限 里把单个工具改为「允许」。
+     *
+     * 历史说明：早期这里默认 ALLOW，理由是设置页还没做、用户没有改权限的入口，
+     * 收紧等于把功能关死。设置页已完成并装机验证，该前提不再成立，故收紧。
      */
     fun systemPackage() = ToolPackage(
         id = "system",
@@ -64,7 +68,7 @@ object BuiltinPackages {
         defs = listOf(
             ToolDef(
                 SystemCommandTool,
-                ToolPermission.ALLOW,
+                ToolPermission.ASK,
                 "以 shell:2000 身份执行系统命令，可打开应用、改系统设置、模拟点击"
             ),
         )
@@ -74,8 +78,10 @@ object BuiltinPackages {
      * 插件包。
      *
      * run_plugin 会执行第三方脚本，脚本以应用自身权限运行，
-     * 也就是能读写 /sdcard 和私有目录。同样先保持 ALLOW，
-     * 与 1.8.7 行为一致，避免升级即功能消失。
+     * 也就是能读写 /sdcard 和私有目录。
+     *
+     * 默认收紧为 ASK：插件是第三方代码，用户在授权前应当知道自己在放行什么。
+     * list_plugins 保持 ALLOW —— 它只读取清单，不执行任何脚本。
      */
     fun pluginPackage() = ToolPackage(
         id = "plugin",
@@ -90,7 +96,7 @@ object BuiltinPackages {
             ),
             ToolDef(
                 BuiltinTools.RunPluginTool,
-                ToolPermission.ALLOW,
+                ToolPermission.ASK,
                 "执行第三方插件脚本，脚本拥有本应用的读写权限"
             ),
         )
