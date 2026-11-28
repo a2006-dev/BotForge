@@ -154,7 +154,7 @@ jobs:
           check "proot 可执行文件"        apkx/lib/arm64-v8a/libbfproot.so
           check "talloc 库"               apkx/lib/arm64-v8a/libtalloc.so
           check "shmem 库"                apkx/lib/arm64-v8a/libandroid-shmem.so
-          check "rootfs 数据"             apkx/assets/rootfs/alpine-rootfs.tar
+          check "rootfs 数据"             apkx/assets/rootfs/termux-rootfs.tar
           check "classes.dex"             apkx/classes.dex
           check "资源表"                  apkx/resources.arsc
 
@@ -167,8 +167,8 @@ jobs:
           esac
 
           # rootfs 必须是有效 gzip，避免空文件或截断文件混入
-          if [ -e apkx/assets/rootfs/alpine-rootfs.tar ]; then
-            gzip -t apkx/assets/rootfs/alpine-rootfs.tar \
+          if [ -e apkx/assets/rootfs/termux-rootfs.tar ]; then
+            gzip -t apkx/assets/rootfs/termux-rootfs.tar \
               && echo "  ok   rootfs gzip 完整性" \
               || { echo "::error title=rootfs 损坏::gzip 校验失败"; fail=1; }
           fi

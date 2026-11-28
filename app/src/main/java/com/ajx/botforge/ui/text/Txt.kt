@@ -428,7 +428,7 @@ object Txt {
     const val TERM_NO_BINARY = "缺少运行环境组件"
 
     /** 缺少可执行文件说明 */
-    const val TERM_NO_BINARY_DESC = "点「安装内置环境」从安装包内解出 Alpine 环境；点「跳过」则只在 Android 本机执行命令。"
+    const val TERM_NO_BINARY_DESC = "点「安装内置环境」从安装包内解出 Linux 用户空间（Termux 布局）；点「跳过」则只在 Android 本机执行命令。"
 
     /** 终端空态 */
     const val TERM_EMPTY = "点击下方启动按钮开启会话"
@@ -443,7 +443,7 @@ object Txt {
 
     const val TERM_SKIPPED_TITLE = "当前使用 Android 本机环境"
 
-    const val TERM_SKIPPED_DESC = "未安装 Alpine 容器。机器人执行终端命令时只在本机 sh 中运行，" +
+    const val TERM_SKIPPED_DESC = "未安装 Linux 环境。机器人执行终端命令时只在本机 sh 中运行，" +
         "可以使用 ls、cat、pm、am 等系统命令，但没有 python3、apk、git 这类 Linux 工具。"
 
     /** 会话启动失败 */

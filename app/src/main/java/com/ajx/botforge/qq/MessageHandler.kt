@@ -432,8 +432,8 @@ object MessageHandler {
 
 【你有一台真的 Linux 手机】
 你可以调用工具来真的做事，不是只能聊天。可用工具：
-- run_command：在手机的 Linux 环境（Ubuntu，proot 内 root 身份）里执行 shell 命令。
-  包管理器是 apt（apt update / apt install -y xxx），跑 Python 用 python3，
+- run_command：在手机的 Linux 环境（Termux 用户空间，proot 容器，非 root）里执行 shell 命令。
+  包管理器是 pkg/apt（pkg install xxx），跑 Python 用 python3，
   curl、git、gcc 都有；缺什么先装。
   手机文件在 /sdcard 下可见。命令默认 120 秒超时，跑久一点可传 timeout（最大 300）。
   第一条命令可能较慢（远端要起一次常驻 shell），后续会复用，不要因为慢就以为失败。
@@ -441,7 +441,7 @@ object MessageHandler {
 - system_command：在 Android 系统 shell（ADB 调试身份）里执行命令，需要用户授权 Shizuku。
   打开 App 用 am start -n 包名/Activity；查已装应用用 pm list packages；
   读改系统设置用 settings get/put；模拟点击用 input tap x y；截图用 screencap。
-  这里没有 Linux 用户空间，没有 apt、没有 python3，要装软件请用 run_command。
+  这里没有 Linux 用户空间，没有 pkg/apt、没有 python3，要装软件请用 run_command。
   如果返回「Shizuku 未运行」或「未获授权」，就把这个情况如实告诉用户，
   让他去 BotForge 设置页处理，不要换个命令反复重试。
 - diagnose_terminal：诊断 Linux 环境起不来的原因，把自检结果写到

@@ -54,19 +54,19 @@ object BuiltinTools {
     /**
      * 模型的主执行工具。
      *
-     * 走 [LinuxShell]，也就是 proot 里的 Alpine 容器，模型因此能用到
+     * 走 [LinuxShell]，也就是 proot 里的 Termux 用户空间，模型因此能用到
      * apt / apk / python3 / git / gcc 这些真实 Linux 工具；不再像以前那样
      * 只能拿到 Android 自带的 toybox sh。
      *
      * 环境没就绪时会自动降级成 Android sh，并在输出前加一句说明，
-     * 让模型知道「现在没有 apt」，而不是反复重试同一条命令。
+     * 让模型知道「现在没有 pkg/apt」，而不是反复重试同一条命令。
      */
     object RunCommandTool : Tool {
         override val name = "run_command"
         override val description =
-            "在手机的 Termux 用户空间（proot 容器，Debian/Ubuntu 系 apt 包管理）里" +
+            "在手机的 Termux 用户空间（proot 容器，apt/pkg 包管理）里" +
                 "执行一条或多行 shell 命令，返回标准输出与标准错误合并后的文本。" +
-                "支持管道、重定向、&&、for 循环、heredoc；支持 apt install / python3 / pip / git / curl。" +
+                "支持管道、重定向、&&、for 循环、heredoc；支持 pkg install / apt install / python3 / pip / git / curl。" +
                 "多条命令可直接换行写在一起，会按顺序执行。" +
                 "宿主存储挂在 /sdcard，家目录是容器内的 /data/data/com.termux/files/home。" +
                 "每条命令都有独立退出码；安装类慢命令可把 timeout 调到 300。" +
