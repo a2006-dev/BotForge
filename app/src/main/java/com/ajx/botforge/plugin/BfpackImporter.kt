@@ -1,11 +1,14 @@
 package com.ajx.botforge.plugin
 
 import com.ajx.botforge.data.Logger
+import com.ajx.botforge.pkg.PackageManifestReader
+import com.ajx.botforge.pkg.PackageSpec
+import com.ajx.botforge.pkg.PermissionDecl
+import com.ajx.botforge.pkg.ReadResult
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
-import org.json.JSONObject
 
 /**
  * `.bfpack` 扩展包导入器。
@@ -19,34 +22,47 @@ import org.json.JSONObject
  *  1. Android 11+ 起，`Android/data` 在系统文件管理器里默认不可见，
  *     普通用户根本找不到这个路径；
  *  2. 拷进去的是散开的目录，没有「一个文件」可以分享给朋友；
- *  3. 装上之后没有校验——`api` 版本不对、id 冲突、manifest 写错，
+ *  3. 装上之后没有校验——`api` 版本不对、id 冲突、清单写错，
  *     要等到重启 App、看日志才发现。
  *
  * `.bfpack` 把这三件事都解决：一个 zip 文件、一键导入、
- * 导入前就能把 manifest 解析出来给用户看。
+ * 导入前就能把清单解析出来给用户看。
  *
- * ## 为什么复用 zip 而不自定义格式
+ * ## 职责划分（本次重构的要点）
  *
- * 任务书允许 `tar` / `tar.gz` / `zip`。选 zip 的理由：
- *  - 它能被系统文件选择器直接识别，用户不需要额外工具；
- *  - 解压用 java.util.zip，零依赖，不用引 apache-commons；
- *  - tar.gz 需要自己实现解压（项目里已有 TarReader，但那是给 rootfs 用的，
- *    面向的是单个大文件，不是多文件目录树）。
+ * 清单的解析——manifest.json / plugin.json / tool.json 三种格式长什么样、
+ * 各自怎么归一成 [PackageSpec]——全部交给 [PackageManifestReader]。
+ * 本文件只负责它在结构上必须自己做的三件事：
+ *
+ *  - 解压：zip 条目的路径穿越与体积上限，见 [isSafeEntryName] 与 [unzip]；
+ *  - 准入：api 版本上限与 id 合法性，在落盘之前拦一道；
+ *  - 落盘：覆盖安装的备份与回滚。
+ *
+ * 从「自己读 plugin.json」改成「调 reader」，唯一理由是不让同一份清单
+ * 在新旧两条路径上被读成两种结果——那是最难查的一类故障。
+ * 代价是 v1 包的处理细节不在本文件里了，读代码时要顺着 reader 看过去。
  *
  * ## 关于 api 版本
  *
- * 任务书规划的是 v2（一个包可同时声明 commands / ai_tools / ui_actions），
- * 但当前 `PluginManifest.CURRENT_API` 仍是 **1**，v2 尚未实现。
- * 因此：
- *  - 本导入器只接受 api <= CURRENT_API 的包；
- *  - 「没有 commands 的包」目前会被 parse() 直接判非法
- *    （`if (cmds.isEmpty()) return null`），所以还装不了纯 ai_tools 包。
- *    v2 落地时需要同时改 parse() 与这里的校验。
+ * 支持上限 [MAX_API] 现在是 **2**，与 [PackageSpec.CURRENT_API] 同源：
+ *
+ *  - api=2 的 manifest.json 包正常安装（v2 唯一的安装入口就在这里）；
+ *  - api=1 的 plugin.json / tool.json 包**仍然能装**，走 reader 的兼容分支，
+ *    并附带一条「建议迁移到 manifest.json」的警告。不回退 v1 是硬要求：
+ *    已经发出去的包不能因为升级 App 就全部变成装不上；
+ *  - api 大于 2 直接拒绝，提示用户更新 App。
+ *
+ * ## 关于 org.json
+ *
+ * 本文件不再直接碰 JSON。全部 JSON 处理集中在 [PackageManifestReader]，
+ * 把「不可单测的 IO」压缩在一层里；本文件因此可以在 JVM 单测里
+ * 覆盖安全边界（见 BfpackImporterTest）。
  *
  * ## 安全边界
  *
  * zip 解压是经典的路径穿越攻击面（`../../` 写出去）。
- * 这里对每个 entry 名做归一化并校验前缀，见 [isSafeEntryName]。
+ * 这里对每个 entry 名做归一化并校验前缀，见 [isSafeEntryName]；
+ * 解压写盘前再用 canonicalPath 复核一次，见 [unzip]。
  * 另外限制单文件与总解压体积，避免 zip bomb 把手机塞满。
  */
 object BfpackImporter {
@@ -54,11 +70,15 @@ object BfpackImporter {
     /**
      * 支持的最高 api 版本。
      *
-     * 直接取 [PluginManifest.CURRENT_API]，不要在这里另写一个数字：
+     * 取 [PackageSpec.CURRENT_API]（当前为 2），不在这里另写一个数字：
      * 两处硬编码一定会漂移——解析器升到 2 而导入器还卡在 1，
-     * 结果是「包能装进去但解析不出来」这种最难查的故障。
+     * 结果就是「带 manifest.json 的包被拒，说只支持到 v1」这种最难查的故障。
+     *
+     * 注意本文件和 reader 各自都判一次 api 上限。这不是冗余失误：
+     * 两道闸任意一道被改错，另一道仍然会拒绝，方向永远是 fail-closed，
+     * 不会出现「两边谁都没拦」的静默放行。
      */
-    private val MAX_API: Int get() = PluginManifest.CURRENT_API
+    private val MAX_API: Int get() = PackageSpec.CURRENT_API
 
     /** 单个包解压后的体积上限。正常插件是几 KB 到几百 KB 脚本，256MB 足够宽松。 */
     private const val MAX_TOTAL_BYTES = 256L * 1024 * 1024
@@ -67,10 +87,15 @@ object BfpackImporter {
     private const val MAX_FILE_BYTES = 32L * 1024 * 1024
 
     /**
-     * 导入预览：解析完 manifest、还没落盘时给用户看的内容。
+     * 导入预览：解析完清单、还没落盘时给用户看的内容。
+     *
+     * 后四个字段是 v2 引入的，全部带默认值，所以老的构造调用、复制调用、
+     * 解构声明都不用改。v1 包上它们留空是**如实反映**：那份清单里
+     * 根本没有 ai_tools、ui_actions、permissions 这些概念，凭空填默认值
+     * 会让用户以为包里声明过。
      */
     data class Preview(
-        /** 包 id，来自 manifest */
+        /** 包 id，来自清单 */
         val id: String,
         /** 显示名 */
         val name: String,
@@ -82,7 +107,7 @@ object BfpackImporter {
         val author: String,
         /** 描述 */
         val description: String,
-        /** 提供的指令名列表 */
+        /** 提供的指令名列表；v2 的纯 AI 工具包这里为空 */
         val commands: List<String>,
         /** 解压后会占多少字节 */
         val totalBytes: Long,
@@ -91,7 +116,22 @@ object BfpackImporter {
         /** 若为 null 表示可以安装；非 null 是拒绝原因 */
         val blockReason: String? = null,
         /** 警告：不影响安装，但用户该知道 */
-        val warnings: List<String> = emptyList()
+        val warnings: List<String> = emptyList(),
+        /** 暴露给模型的 AI 工具名列表 */
+        val apiTools: List<String> = emptyList(),
+        /** 面板动作 id 列表；v1 tool.json 迁移后是单条 run */
+        val uiActions: List<String> = emptyList(),
+        /** 权限的人类可读描述，按风险从高到低排好序 */
+        val permissions: List<String> = emptyList(),
+        /**
+         * 运行时标识：android_sh 或 proot。
+         *
+         * 这是**清单里声明的值**，不是实际执行环境。当前版本声明 proot 也仍按
+         * android_sh 执行（见 PackageSpec 的 runtimeWarnings），所以界面上必须
+         * 连带显示读取层追加的那条警告，不能只把这个字符串亮出来让用户以为
+         * 已经跑在容器里。
+         */
+        val runtime: String = "android_sh"
     )
 
     /**
@@ -105,66 +145,68 @@ object BfpackImporter {
         val staging = File(targetRoot, ".staging_${System.currentTimeMillis()}")
         try {
             val stats = unzip(pack, staging)
-            val mf = File(staging, "plugin.json")
-            if (!mf.isFile) {
-                return failed("包里没有 plugin.json")
+
+            // 清单查找顺序（manifest.json → plugin.json → tool.json）由 reader 决定，
+            // 本文件不再各写一份——写两份就会出现「导入器认 manifest.json、
+            // 读取器认 plugin.json」这种自相矛盾的状态。
+            val read = PackageManifestReader.read(staging)
+            val success = read as? ReadResult.Success
+            if (success == null) {
+                val reason = (read as? ReadResult.Failure)?.reason ?: "清单解析失败"
+                return failed(reason)
             }
-            val json = runCatching { JSONObject(mf.readText()) }
-                .getOrElse { return failed("plugin.json 不是合法 JSON：${it.message}") }
+            val spec = success.spec
 
-            // parse() 用 **null** 表示失败，不是抛异常，所以不能用 getOrElse
-            // 兜底——那样只能接住真正抛出的异常，null 会直接漏到下一行，
-            // 然后在 manifest.api 处编译失败（可空接收者）。
-            val parsed = runCatching { PluginManifest.parse(json, staging) }
-                .getOrElse { return failed("解析 plugin.json 时出错：${it.message}") }
-            val manifest = parsed
-                ?: return failed("manifest 字段不完整：缺少 id 或 commands，或 commands 全为空")
+            // 第一道闸：api 上限。reader 内部也判过一次，见 MAX_API 的说明。
+            if (spec.api > MAX_API) return failed(tooNewReason(spec.api))
 
-            val warnings = mutableListOf<String>()
-
-            // api 版本检查
-            if (manifest.api > MAX_API) {
-                return failed(
-                    "这个包要求协议 v${manifest.api}，当前 App 只支持到 v$MAX_API。" +
-                        "请更新 BotForge 后再装。"
-                )
-            }
-            // 注意：这里不把「低于当前版本」当警告。
-            // 当前 CURRENT_API 是 1，也就是说只有 v1 一种合法值，
-            // 写「该包使用旧协议」会让用户以为自己的包过时了，是误导。
-            // 等真的推出 v2 并需要区分时再加这条警告。
+            val warnings = ArrayList<String>(success.warnings)
 
             // id 冲突检查
-            val existing = File(targetRoot, manifest.id)
-            if (existing.exists()) {
-                warnings += "已存在同 id 的包（${manifest.id}），继续安装会覆盖它。"
+            if (File(targetRoot, spec.id).exists()) {
+                warnings.add("已存在同 id 的包（${spec.id}），继续安装会覆盖它。")
             }
 
-            // 入口脚本缺失检查：指令声明了 entry 但文件不在，装上也会运行失败
-            manifest.commands.forEach { c ->
-                val entry = File(staging, c.entry)
-                if (!entry.isFile) {
-                    warnings += "指令 /${c.command} 声明的入口 ${c.entry} 不在包里，运行时会失败。"
+            // 入口脚本缺失检查：声明了 entry 但文件不在，装上也会运行失败。
+            // 三类能力都查——v2 的 ai_tools / ui_actions 同样有 entry 字段，
+            // 只查 commands 会让纯 AI 工具包带着断链装进去。
+            spec.commands.forEach { c ->
+                if (!File(staging, c.entry).isFile) {
+                    warnings.add("指令 /${c.command} 声明的入口 ${c.entry} 不在包里，运行时会失败。")
+                }
+            }
+            spec.aiTools.forEach { t ->
+                if (!File(staging, t.entry).isFile) {
+                    warnings.add("AI 工具 ${t.name} 声明的入口 ${t.entry} 不在包里，运行时会失败。")
+                }
+            }
+            spec.uiActions.forEach { a ->
+                if (!File(staging, a.entry).isFile) {
+                    warnings.add("面板动作 ${a.id} 声明的入口 ${a.entry} 不在包里，运行时会失败。")
                 }
             }
 
-            // 这里不再检查 commands 是否为空：
-            // PluginManifest.parse() 里有 `if (cmds.isEmpty()) return null`，
-            // 空指令的包在上一行就已经走 failed 分支了。
-            // 保留一段注释是为了避免后来者以为漏了检查而重复添加。
+            // 「三类能力全空」的拒绝放在 reader 的统一校验里，这里不重复写：
+            // v2 允许 commands 为空（纯 ai_tools 包正是 v2 最想支持的形态），
+            // 但 commands、ai_tools、ui_actions 三者都空的包没有安装意义。
+            // 判据只有一处，避免两边规则漂移后出现「导入器放过、加载器丢弃」。
 
             return Preview(
-                id = manifest.id,
-                name = manifest.name,
-                version = manifest.version,
-                api = manifest.api,
-                author = manifest.author,
-                description = manifest.description,
-                commands = manifest.commands.map { it.command },
+                id = spec.id,
+                name = spec.name,
+                version = spec.version,
+                api = spec.api,
+                author = spec.author,
+                description = spec.description,
+                commands = spec.commands.map { it.command },
                 totalBytes = stats.first,
                 fileCount = stats.second,
                 blockReason = null,
-                warnings = warnings
+                warnings = warnings,
+                apiTools = spec.aiTools.map { it.name },
+                uiActions = spec.uiActions.map { it.id },
+                permissions = readablePermissions(spec.permissions),
+                runtime = runtimeLabel(spec.runtime)
             )
         } finally {
             // 预览阶段的临时目录一定要清掉：用户可能只是点开看看不装，
@@ -185,35 +227,40 @@ object BfpackImporter {
         val staging = File(targetRoot, ".staging_${System.currentTimeMillis()}")
         try {
             unzip(pack, staging)
-            val mf = File(staging, "plugin.json")
-            if (!mf.isFile) return "包里没有 plugin.json"
 
-            val json = runCatching { JSONObject(mf.readText()) }
-                .getOrElse { return "plugin.json 不是合法 JSON：${it.message}" }
-            val parsed = runCatching { PluginManifest.parse(json, staging) }
-                .getOrElse { return "解析 plugin.json 时出错：${it.message}" }
-            val manifest = parsed
-                ?: return "manifest 字段不完整：缺少 id 或 commands，或 commands 全为空"
+            val read = PackageManifestReader.read(staging)
+            val success = read as? ReadResult.Success
+            if (success == null) {
+                return (read as? ReadResult.Failure)?.reason ?: "清单解析失败"
+            }
+            val spec = success.spec
+
+            if (spec.api > MAX_API) return tooNewReason(spec.api)
 
             // 防替换：用户在确认页看到的是 A，装的必须是 A
-            if (manifest.id != expectedId) {
-                return "包内容已变化（期望 $expectedId，实际 ${manifest.id}），请重新选择文件。"
+            if (spec.id != expectedId) {
+                return "包内容已变化（期望 $expectedId，实际 ${spec.id}），请重新选择文件。"
             }
 
             // 必须校验 id 才能拿它拼路径。
-            // parse() 只保证 id 非空，不校验字符——`../evil`、`a/b`、`x y`
-            // 都能过 parse（它只做了 trim + isEmpty 检查）。
-            // 不校验就直接 File(targetRoot, manifest.id)，等于把上面
-            // 好不容易挡住 disable 的 zip 路径穿越又从 manifest 开了一个口子。
-            // 这里的规则与 uninstall() 完全一致，两处不能各写一套。
-            if (!isSafePackageId(manifest.id)) {
-                return "包 id 非法（${manifest.id}）：不能包含路径分隔符或 .."
+            // reader 已经在 read() 里用 packageIdProblem 判过一次，
+            // 这里仍保留本文件自己的 isSafePackageId：commit 是与文件系统
+            // 直接相邻的那一层，不能把「拼路径前先校验」的责任转交给上游。
+            // 不校验就直接 File(targetRoot, spec.id)，等于给 zip 路径穿越
+            // 在 manifest 上开第二个口子。规则与 uninstall() 必须一致。
+            if (!isSafePackageId(spec.id)) {
+                return "包 id 非法（${spec.id}）：不能包含路径分隔符或 .."
             }
 
-            val dest = File(targetRoot, manifest.id)
+            // 读取层的警告只影响「用户知不知道」，不影响「能不能装」。
+            // 日志落盘本身可能因存储异常失败，这里兜住：宁可少一条日志，
+            // 也不能因为写日志失败就让一次合法安装中断在半路。
+            runCatching { success.warnings.forEach { Logger.w("Bfpack", it) } }
+
+            val dest = File(targetRoot, spec.id)
             if (dest.exists()) {
                 // 覆盖安装：先备份再删，失败能回滚
-                val backup = File(targetRoot, ".backup_${manifest.id}")
+                val backup = File(targetRoot, ".backup_${spec.id}")
                 runCatching { backup.deleteRecursively() }
                 if (!dest.renameTo(backup)) {
                     return "无法替换已安装的包（可能是文件被占用），请重启 App 后重试。"
@@ -229,7 +276,7 @@ object BfpackImporter {
                     return "写入失败，请检查存储空间。"
                 }
             }
-            Logger.i("Bfpack", "已安装 ${manifest.id} v${manifest.version}")
+            Logger.i("Bfpack", "已安装 ${spec.id} v${spec.version}（api ${spec.api}）")
             return null
         } finally {
             runCatching { staging.deleteRecursively() }
@@ -259,6 +306,45 @@ object BfpackImporter {
         commands = emptyList(), totalBytes = 0, fileCount = 0,
         blockReason = reason
     )
+
+    /** api 过新时的统一中文原因；preview 与 commit 共用一句，避免两处措辞不一致。 */
+    private fun tooNewReason(declared: Int): String =
+        "这个包要求协议 v$declared，当前 App 只支持到 v$MAX_API。请更新 BotForge 后再装。"
+
+    /**
+     * 把权限声明转成给人看的字符串，按风险降序。
+     *
+     * 排序在读取层已经做过一次，这里再排一遍是因为 [Preview] 是要直接渲染的产物：
+     * 它不该依赖调用方记得「spec 里的 permissions 已经排好」这个隐含约定。
+     * sortedByDescending 是稳定排序，同一风险档内保持作者的声明顺序。
+     *
+     * 标签用原文而不是翻成中文：用户对照包作者的 manifest 排查时，
+     * 原文才能一一对上；翻成中文反而要多做一次心算。
+     */
+    private fun readablePermissions(decls: List<PermissionDecl>): List<String> =
+        decls.sortedByDescending { it.tag.risk }.map { d ->
+            val base = "${d.tag.tag}（${riskLabel(d.tag.risk)}）"
+            val reason = d.reason.trim()
+            if (reason.isEmpty()) base else "$base：$reason"
+        }
+
+    /**
+     * 风险等级的中文说法，与 [com.ajx.botforge.pkg.PermissionTag] 里 risk 的 0..3 定义对应。
+     * 越界值不崩，原样报数字——将来加了新等级，用户看到的是可查的数字而不是空白。
+     */
+    private fun riskLabel(risk: Int): String = when (risk) {
+        0 -> "无副作用"
+        1 -> "低风险"
+        2 -> "中风险"
+        3 -> "高风险"
+        else -> "风险等级 $risk"
+    }
+
+    /** 运行时标识串，供设置页直接显示；未知值由 Runtime 的解析保证不会出现。 */
+    private fun runtimeLabel(runtime: com.ajx.botforge.pkg.Runtime): String = when (runtime) {
+        com.ajx.botforge.pkg.Runtime.ANDROID_SH -> "android_sh"
+        com.ajx.botforge.pkg.Runtime.PROOT -> "proot"
+    }
 
     /** @return (总字节数, 文件数) */
     private fun unzip(zipFile: File, destDir: File): Pair<Long, Int> {
