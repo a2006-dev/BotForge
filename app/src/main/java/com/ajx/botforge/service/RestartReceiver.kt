@@ -17,6 +17,17 @@ class RestartReceiver : BroadcastReceiver() {
             Logger.i("Restart", "保活已关闭，跳过")
             return
         }
+        // 用户手动点了「停止服务」。此时绝不能拉起 —— 否则定时器会把服务
+        // 一遍遍救活，用户按了停止却停不掉，只能去系统设置里强停应用。
+        //
+        // 之前这里只查了 keepAlive，漏了 canAutoRestart()，而后者才是
+        // 「自动重启」与「用户主动停止」这两个意图的合取判断：
+        //   canAutoRestart = autoRestart && !userStopped
+        if (!Config.canAutoRestart()) {
+            val why = if (Config.userStopped) "用户已手动停止服务" else "自动重启已关闭"
+            Logger.i("Restart", "$why，跳过拉起")
+            return
+        }
         val app = ctx.applicationContext
         // 主服务还活着就撤掉排程，避免不必要的唤醒
         if (BotService.instance != null) {

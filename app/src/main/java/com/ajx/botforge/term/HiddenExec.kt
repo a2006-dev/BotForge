@@ -59,6 +59,39 @@ object HiddenExec {
     /** 就绪等待上限。首次启动要解包 rootfs，给足时间。 */
     private const val READY_TIMEOUT_MS = 180_000L
 
+    /**
+     * 连续启动失败的上限。超过就进入冷却，不再每次调用都重新拉起 proot。
+     *
+     * 为什么需要这个：rootfs 损坏、SELinux 拦截、存储只读这类故障是**持续性**的，
+     * 重试不会变好。没有熔断时，QQ 里每来一条消息都会重新拉起 proot 并阻塞
+     * 最多 [READY_TIMEOUT_MS]，表现为机器人整体卡死三分钟，而用户看不到原因。
+     */
+    private const val MAX_CONSECUTIVE_FAILURES = 3
+
+    /** 触发熔断后的冷却时长。冷却期内直接返回上次的失败原因。 */
+    private const val COOLDOWN_MS = 60_000L
+
+    /** 连续失败计数与上次失败原因。成功一次即清零。 */
+    @Volatile private var consecutiveFailures = 0
+    @Volatile private var lastFailureReason: String? = null
+    @Volatile private var cooldownUntil = 0L
+
+    /** 供诊断与 UI 使用：当前是否处于熔断冷却中。 */
+    fun isCoolingDown(): Boolean = System.currentTimeMillis() < cooldownUntil
+
+    /** 熔断状态快照，给 diagnose_terminal 用。返回 null 表示健康。 */
+    fun failureState(): String? =
+        if (!isCoolingDown()) null
+        else "连续失败 $consecutiveFailures 次，冷却剩余 " +
+            "${(cooldownUntil - System.currentTimeMillis()) / 1000} 秒。上次原因：$lastFailureReason"
+
+    /** 用户手动重试时清空熔断（例如在设置页点了「重装环境」）。 */
+    fun resetFailureState() {
+        consecutiveFailures = 0
+        lastFailureReason = null
+        cooldownUntil = 0L
+    }
+
     /** 常驻 shell。按 key 复用，key 变化（比如切了工作目录方案）就重建。 */
     @Volatile
     private var shell: Shell? = null
@@ -142,7 +175,31 @@ object HiddenExec {
             }
             close()
         }
-        val created = createShell(context, key)
+        // 熔断检查放在最前面：冷却期内不再尝试拉起 proot。
+        if (isCoolingDown()) {
+            throw IllegalStateException(
+                "Linux 环境连续启动失败 $consecutiveFailures 次，已进入冷却。" +
+                    (lastFailureReason?.let { "\n上次失败原因：$it" } ?: "")
+            )
+        }
+        val created = try {
+            createShell(context, key)
+        } catch (e: Throwable) {
+            // 关键：失败时把 shell 显式置空，并记录原因。
+            // 旧实现直接抛异常，shell 字段保持 null，下次调用会从零再来一遍，
+            // 失败痕迹一点不留 —— 这是「每条消息都卡三分钟」的真正原因。
+            shell = null
+            lastFailureReason = e.message ?: e.javaClass.simpleName
+            consecutiveFailures += 1
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                cooldownUntil = System.currentTimeMillis() + COOLDOWN_MS
+            }
+            throw e
+        }
+        // 成功：清零熔断状态
+        consecutiveFailures = 0
+        lastFailureReason = null
+        cooldownUntil = 0L
         shell = created
         return created
     }
