@@ -168,24 +168,17 @@ fun MemoryScreen(onBack: () -> Unit) {
                     .toList()
                     .sortedBy { (_, list) -> list.first().botName }
 
-                grouped.forEach { entry ->
-                    val list = entry.value
-                    SectionHeader(
-                        list.first().botName + " · " +
-                            String.format(Locale.US, Txt.MEM_BOT_COUNT_FMT, list.size)
+                for (entry in grouped) {
+                    BotGroupSection(
+                        botName = entry.value.first().botName,
+                        sessions = entry.value,
+                        expandedKey = expandedKey,
+                        previews = previews,
+                        previewLoading = previewLoading,
+                        timeFmt = fmt,
+                        onToggle = { toggle(it) },
+                        onClear = { pendingOne = it }
                     )
-                    list.forEach { session ->
-                        SessionCard(
-                            session = session,
-                            expanded = expandedKey == session.key,
-                            turns = previews[session.key].orEmpty(),
-                            previewLoading = previewLoading == session.key,
-                            timeText = if (session.lastTs > 0L) fmt.format(Date(session.lastTs)) else Txt.UNKNOWN,
-                            onToggle = { toggle(session) },
-                            onClear = { pendingOne = session }
-                        )
-                        Spacer(Modifier.height(Spacing.sm))
-                    }
                 }
 
                 Spacer(Modifier.height(Spacing.lg))
@@ -270,6 +263,54 @@ fun MemoryScreen(onBack: () -> Unit) {
 }
 
 /** 概览：会话数、总轮数、总占用。 */
+/**
+ * 一个机器人下的全部会话区块。
+ *
+ * 为什么单独抽成一个 @Composable 函数，而不是就地写在 forEach 里：
+ * 原先 SectionHeader / SessionCard / Spacer 直接写在 `grouped.forEach { }`
+ * 这个内联 lambda 中，CI 在 Spacer 一行报
+ * 「@Composable invocations can only happen from the context of a @Composable function」。
+ * 内联 lambda 本应保留 composable 上下文，但把渲染逻辑塞进两层嵌套 lambda
+ * 依赖的是编译器的上下文推断，而不是显式的函数契约 —— 一旦出错，
+ * 报错点还会落在最不起眼的那个 Spacer 上，完全指不到根因。
+ *
+ * 另外这里用 for 循环而不是 forEach：报错正发生在 forEach 的 lambda 内部，
+ * 说明该内联 lambda 没有被当成 composable 上下文。for 循环是普通语句，
+ * 不涉及 lambda 推断，能绕开这个坑。
+ *
+ * 抽成函数后，参数表把「需要哪些状态、能改哪些状态」写死了：
+ * 这里只读 expandedKey / previews / previewLoading，所有写操作
+ * 都以 onToggle / onClear 回调交回上层。会话本身不可变，
+ * 区块内部不再持有任何可变状态。
+ */
+@Composable
+private fun BotGroupSection(
+    botName: String,
+    sessions: List<MemSession>,
+    expandedKey: String,
+    previews: Map<String, List<Memory.Turn>>,
+    previewLoading: String,
+    timeFmt: SimpleDateFormat,
+    onToggle: (MemSession) -> Unit,
+    onClear: (MemSession) -> Unit
+) {
+    SectionHeader(
+        botName + " · " + String.format(Locale.US, Txt.MEM_BOT_COUNT_FMT, sessions.size)
+    )
+    for (session in sessions) {
+        SessionCard(
+            session = session,
+            expanded = expandedKey == session.key,
+            turns = previews[session.key].orEmpty(),
+            previewLoading = previewLoading == session.key,
+            timeText = if (session.lastTs > 0L) timeFmt.format(Date(session.lastTs)) else Txt.UNKNOWN,
+            onToggle = { onToggle(session) },
+            onClear = { onClear(session) }
+        )
+        Spacer(Modifier.height(Spacing.sm))
+    }
+}
+
 @Composable
 private fun SummaryCard(sessions: Int, rounds: Int, messages: Int, sizeText: String) {
     val c = botColors
@@ -393,7 +434,7 @@ private fun SessionCard(
                         .padding(Spacing.sm),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    turns.forEach { turn ->
+                    for (turn in turns) {
                         TurnLine(turn)
                     }
                 }
