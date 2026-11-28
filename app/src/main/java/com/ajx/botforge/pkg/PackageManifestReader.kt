@@ -15,7 +15,7 @@ sealed class ReadResult {
      * 读取成功。
      *
      * [warnings] 是不影响安装、但用户该知道的事（未知权限标签被跳过、
-     * 入口文件不存在、v1 的 timeoutSec 无从表达等）。
+     * 入口文件不存在、声明的 runtime 当前尚未生效等）。
      */
     data class Success(
         val spec: PackageSpec,
@@ -45,6 +45,10 @@ sealed class ReadResult {
  * 「not mocked」。所以模型层与纯函数保持零依赖，可被单测覆盖；
  * 而本文件承担全部 JSON 触碰，代价是它只能在设备或 Robolectric 下验证。
  * 这是有意的取舍：把「不可测的 IO」压缩到一层。
+ *
+ * 因此，凡是「文案要不要出现」这种值得被测试钉住的判断，都尽量下沉成
+ * PackageSpec.kt 里的纯函数（例如 [runtimeWarnings]），本文件只负责把它们
+ * 的结果追加进 warnings。这样规则唯一的家在没有 JSON 依赖的那一侧。
  *
  * ## 关于 null
  *
@@ -194,6 +198,14 @@ object PackageManifestReader {
         val uiActions = readUiActions(json.optJSONArray("ui_actions"))
         val permissions = readPermissions(json.optJSONArray("permissions"), warnings)
 
+        val runtime = Runtime.parse(json.optString("runtime", ""))
+
+        // runtime 目前没有消费者：执行层一律走 android_sh，不会按这里分流。
+        // 这个事实必须说出来，否则作者写了 runtime=proot 会以为已经切过去了，
+        // 然后在 android_sh 里对着 command not found 一脸茫然。
+        // 文案与判断都来自 [runtimeWarnings]，那是个可被 JVM 单测覆盖的纯函数。
+        warnings.addAll(runtimeWarnings(runtime))
+
         val spec = PackageSpec(
             id = id,
             name = json.optString("name", id).ifBlank { id },
@@ -203,7 +215,7 @@ object PackageManifestReader {
             description = json.optString("description", ""),
             homepage = json.optString("homepage", ""),
             license = json.optString("license", ""),
-            runtime = Runtime.parse(json.optString("runtime", "")),
+            runtime = runtime,
             origin = Origin.V2,
             commands = commands,
             aiTools = aiTools,
@@ -266,8 +278,16 @@ object PackageManifestReader {
      * 它可能调用 apk 装出来的二进制；谎称能用系统 sh 跑，装完就是一片
      * command not found。
      *
-     * 已知信息损失：v1 的 timeoutSec 与 risky 在 [PackageSpec] 里没有对应字段。
-     * 不硬塞进不相干的字段（例如把 risky 编成一条假权限），而是转成警告让用户知情。
+     * 字段对齐：
+     *  - `timeoutSec` 原样带进 [PackageUiAction.timeoutSec]，不再丢弃。
+     *    v1 里这个值是真在用的（旧执行层直接拿它当进程超时），丢掉等于把作者
+     *    调好的数字悄悄改回 60 秒，属于「清单里的值与运行行为对不上」这类最难查的
+     *    问题，所以选择保留而不是只警告。
+     *  - `risky` 在 [PackageSpec] 里确实没有对应字段，也不硬塞进不相干的字段
+     *    （例如编成一条假权限），而是转成警告让用户知情。
+     *
+     * 另外，迁移出来的 PROOT 同样没有消费者（见 [Runtime] 的现状说明），
+     * 这种情况也要明说，不能让「已按 proot 迁移」这句话被读成「已按 proot 执行」。
      */
     private fun parseV1Tool(json: JSONObject, dir: File): Parsed {
         val id = json.optString("id").trim()
@@ -276,13 +296,17 @@ object PackageManifestReader {
         val displayName = json.optString("name", id).ifBlank { id }
         val entry = json.optString("entry", DEFAULT_ENTRY_RUN).ifBlank { DEFAULT_ENTRY_RUN }
         val params = readParams(json.optJSONArray("params"))
+        // 与 v1 解析侧同一默认值（tools/ToolPackage.kt 读的也是 60），
+        // 缺失时不给 0 之类的哨兵值：0 秒会在执行层被当成「立刻超时」。
+        val timeoutSec = json.optInt("timeoutSec", PackageUiAction.DEFAULT_TIMEOUT_SEC)
 
         val action = PackageUiAction(
             id = RUN_ACTION_ID,
             label = displayName,
             description = json.optString("description", ""),
             entry = entry,
-            params = params
+            params = params,
+            timeoutSec = timeoutSec
         )
 
         val warnings = mutableListOf<String>()
@@ -290,6 +314,12 @@ object PackageManifestReader {
         if (json.optBoolean("risky", false)) {
             warnings.add("该包在原 $TOOL_JSON 里声明了 risky，启用前请确认它要做什么。")
         }
+        // 这里的 proot 是迁移规则强行给的，不是作者写的，所以不能套用
+        // 「该包声明 runtime=proot」那句文案，否则会误导用户去找一行并不存在的声明。
+        warnings.add(
+            "v1 工具包已按 proot 迁移，但当前版本尚未实现按包切换运行环境，" +
+                "实际仍以 android_sh 方式运行。"
+        )
 
         val spec = PackageSpec(
             id = id,
@@ -364,6 +394,14 @@ object PackageManifestReader {
         }
     }
 
+    /**
+     * AI 工具数组。
+     *
+     * permission 的处理全部委托给 [PackageAiTool.normalizePermission]：
+     * 那是本文件里最需要被测试盯住的一条规则（未知值回落 ASK），而它待在
+     * 无 JSON 依赖的模型层里，才能被 JVM 单测直接断言。这里只负责把原始
+     * 字符串原样递过去，不自己再 trim 一次——两处归一化迟早会写出差异。
+     */
     private fun readAiTools(arr: JSONArray?): List<PackageAiTool> {
         if (arr == null) return emptyList()
         val out = ArrayList<PackageAiTool>(arr.length())
@@ -398,7 +436,11 @@ object PackageManifestReader {
                     label = o.optString("label", actionId).ifBlank { actionId },
                     description = o.optString("description", ""),
                     entry = o.optString("entry", DEFAULT_ENTRY_RUN).ifBlank { DEFAULT_ENTRY_RUN },
-                    params = readParams(o.optJSONArray("params"))
+                    params = readParams(o.optJSONArray("params")),
+                    timeoutSec = o.optInt(
+                        "timeoutSec",
+                        PackageUiAction.DEFAULT_TIMEOUT_SEC
+                    )
                 )
             )
         }

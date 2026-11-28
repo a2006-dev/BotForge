@@ -334,4 +334,177 @@ class PackageSpecTest {
         assertEquals(PermissionTag.NETWORK, sorted[2].tag)
         assertEquals("最低风险项应等于 network 的档位", 1, sorted[2].tag.risk)
     }
+
+    // ---------------- 13. 未知权限值必须回落 ASK（安全方向修正） ----------------
+
+    @Test
+    fun `未知权限值回落为 ask 而不是 allow`() {
+        // 这一类是「作者写了，但写的不是三档之一」：拼错、写小写、带杂字符。
+        // 若回落 ALLOW，一个字母的笔误就会把「需要用户表态」变成「无条件放行」，
+        // 所以这里逐条钉死：全部必须是 ASK。
+        assertEquals(
+            "小写 deny 应在归一化后正确识别为 DENY，而不是当成未知值",
+            PackageAiTool.PERMISSION_DENY,
+            PackageAiTool.normalizePermission("deny")
+        )
+        assertEquals(
+            "带空格的 ASK 应在归一化后正确识别",
+            PackageAiTool.PERMISSION_ASK,
+            PackageAiTool.normalizePermission("ASK ")
+        )
+        assertEquals(
+            "无法识别的档位必须回落 ASK",
+            PackageAiTool.PERMISSION_ASK,
+            PackageAiTool.normalizePermission("MAYBE")
+        )
+        assertEquals(
+            "疑似新版档位也只能按 ASK 保守处理",
+            PackageAiTool.PERMISSION_ASK,
+            PackageAiTool.normalizePermission("CONFIRM")
+        )
+        assertEquals(
+            "中文「允许」不是合法档位，不能因此直接放行",
+            PackageAiTool.PERMISSION_ASK,
+            PackageAiTool.normalizePermission("允许")
+        )
+        assertEquals(
+            "三档本身也要逐字确认没有被改坏",
+            PackageAiTool.PERMISSION_ALLOW,
+            PackageAiTool.normalizePermission("allow")
+        )
+    }
+
+    // ---------------- 14. 权限解析前先 trim + uppercase ----------------
+
+    @Test
+    fun `权限解析前做大小写与首尾空白归一化`() {
+        val expectations = listOf(
+            "ASK" to PackageAiTool.PERMISSION_ASK,
+            "ask" to PackageAiTool.PERMISSION_ASK,
+            " Ask " to PackageAiTool.PERMISSION_ASK,
+            "\tAsK\n" to PackageAiTool.PERMISSION_ASK,
+            "allow" to PackageAiTool.PERMISSION_ALLOW,
+            "  ALLOW  " to PackageAiTool.PERMISSION_ALLOW,
+            "Deny" to PackageAiTool.PERMISSION_DENY,
+            " dEnY " to PackageAiTool.PERMISSION_DENY
+        )
+        expectations.forEach { (raw, want) ->
+            assertEquals("raw=[$raw] 应归一为 $want", want, PackageAiTool.normalizePermission(raw))
+        }
+    }
+
+    // ---------------- 15. 只有空值/缺失才用包声明的默认 ----------------
+
+    @Test
+    fun `权限为空时才使用包声明的默认值`() {
+        assertEquals(
+            "null（字段缺失）应使用 fallback",
+            PackageAiTool.PERMISSION_ALLOW,
+            PackageAiTool.normalizePermission(null)
+        )
+        assertEquals(
+            "空串等同缺失，应使用 fallback",
+            PackageAiTool.PERMISSION_ALLOW,
+            PackageAiTool.normalizePermission("")
+        )
+        assertEquals(
+            "纯空白等同缺失，应使用 fallback",
+            PackageAiTool.PERMISSION_ALLOW,
+            PackageAiTool.normalizePermission("   ")
+        )
+        assertEquals(
+            "fallback 可被调用方覆盖，且缺失时确实尊重它",
+            PackageAiTool.PERMISSION_DENY,
+            PackageAiTool.normalizePermission(null, PackageAiTool.PERMISSION_DENY)
+        )
+        assertEquals(
+            "认不出的值不受 fallback 影响，一律 ASK：否则把 fallback 传成 ALLOW 就又漏了",
+            PackageAiTool.PERMISSION_ASK,
+            PackageAiTool.normalizePermission("nonsense", PackageAiTool.PERMISSION_ALLOW)
+        )
+        assertEquals(
+            "PackageAiTool 的构造默认值仍是 ALLOW，即「作者没写这一栏」的历史语义不变",
+            PackageAiTool.PERMISSION_ALLOW,
+            PackageAiTool(name = "lookup").permission
+        )
+    }
+
+    // ---------------- 16. v1 的 timeoutSec 迁移后不丢值 ----------------
+
+    @Test
+    fun `v1 的 timeoutSec 迁移后不丢值`() {
+        // v1 tools/ToolManifest.kt 里 tool.json 的 timeoutSec 默认 60，
+        // 而旧执行层（tools/ToolPackage.kt）是直接拿它当进程超时的。
+        // 迁移时若丢掉这个字段，作者调好的 20 秒会被悄悄当成 60 秒跑，
+        // 因此模型层必须有对应字段，且默认值与 v1 对齐（不能是 0：0 秒等于立刻超时）。
+        assertEquals(
+            "默认值必须与 v1 保持一致，否则迁移本身就会改变行为",
+            60,
+            PackageUiAction.DEFAULT_TIMEOUT_SEC
+        )
+        assertEquals(
+            "未声明时取默认",
+            PackageUiAction.DEFAULT_TIMEOUT_SEC,
+            PackageUiAction(id = "run").timeoutSec
+        )
+        assertEquals(
+            "作者声明的值必须原样保留",
+            20,
+            PackageUiAction(id = "run", timeoutSec = 20).timeoutSec
+        )
+        assertEquals(
+            "copy 等派生操作也不该把它弄丢",
+            20,
+            PackageUiAction(id = "run", timeoutSec = 20).copy(label = "改个名").timeoutSec
+        )
+        assertEquals(
+            "模型层不做钳制：存的是声明原值，钳制是执行层的策略",
+            0,
+            PackageUiAction(id = "run", timeoutSec = 0).timeoutSec
+        )
+    }
+
+    // ---------------- 17. 声明 runtime=proot 必须产生警告 ----------------
+
+    @Test
+    fun `声明 runtime 为 proot 会产出未生效警告`() {
+        // 本任务不实现按包切换运行环境（那要动执行层），但绝不能让
+        // runtime=proot 静默无效。警告文案由纯函数产出，读取器只负责追加，
+        // 于是「这条警告还在不在」可以在这里钉住。
+        val warnings = runtimeWarnings(Runtime.PROOT)
+        assertEquals("声明 proot 必须且只产出一条警告", 1, warnings.size)
+        val text = warnings[0]
+        assertTrue("警告必须点名 proot：$text", text.contains("proot"))
+        assertTrue(
+            "警告必须说明实际仍以 android_sh 运行，否则用户会以为包根本跑不起来：$text",
+            text.contains("android_sh")
+        )
+        assertTrue(
+            "警告必须是中文，能直接显示给用户：$text",
+            text.any { it.code > 127 }
+        )
+        assertTrue(
+            "警告要说明是「尚未实现」，而不是「不支持这个值」：$text",
+            text.contains("尚未实现")
+        )
+        assertEquals(
+            "文案常量与函数输出应同源，避免改一处漏一处",
+            Runtime.WARNING_PROOT_NOT_APPLIED,
+            text
+        )
+    }
+
+    // ---------------- 18. android_sh 不产生多余警告 ----------------
+
+    @Test
+    fun `runtime 为 android_sh 时不产出警告`() {
+        assertTrue(
+            "android_sh 就是当前唯一真实生效的运行方式，不该打扰用户",
+            runtimeWarnings(Runtime.ANDROID_SH).isEmpty()
+        )
+        assertTrue(
+            "默认构造的 spec 也应安静：默认 runtime 是 android_sh",
+            runtimeWarnings(PackageSpec(id = "com.example.x").runtime).isEmpty()
+        )
+    }
 }

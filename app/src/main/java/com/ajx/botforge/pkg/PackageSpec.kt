@@ -13,12 +13,33 @@ import java.io.File
  *
  * 默认取 [ANDROID_SH]：绝大多数指令只是拼一段文本回消息，不值得为它拉起容器。
  * 用户没显式要 proot，就不该付这份代价。
+ *
+ * ## 现状：这一栏目前只是「声明」，还没有「分发」
+ *
+ * 当前版本读到 [PROOT] 之后只会把它记进 [PackageSpec.runtime]，全仓库没有任何
+ * 执行路径按它分流；真正跑脚本时仍然一律走 android_sh。也就是说清单里写
+ * `runtime: "proot"` 在今天等于什么都没发生——它不会报错，也不会生效，
+ * 是个沉默的陷阱。
+ *
+ * 让执行层支持按包切换运行环境需要改执行分支，不在本模型的职责范围内；
+ * 在此之前至少要做到「不静默」：读取层遇到 [PROOT] 会追加一条警告
+ * （见 [runtimeWarnings]），把「你写的这行暂时无效」明确摆到用户面前。
  */
 enum class Runtime {
     ANDROID_SH,
     PROOT;
 
     companion object {
+        /**
+         * runtime 声明为 [PROOT] 时要显示给用户的提示。
+         *
+         * 措辞刻意点明「实际仍以 android_sh 方式运行」：只说「暂不支持」，
+         * 用户会以为包根本跑不起来；说清真相他才知道该按 android_sh 的
+         * 可用环境去排查 command not found，而不是白等一个永远不来的容器。
+         */
+        const val WARNING_PROOT_NOT_APPLIED =
+            "该包声明 runtime=proot，当前版本尚未实现按包切换运行环境，实际仍以 android_sh 方式运行。"
+
         /**
          * 宽容解析。
          *
@@ -35,6 +56,19 @@ enum class Runtime {
             }
         }
     }
+}
+
+/**
+ * 声明某个 [Runtime] 时该一并告知用户的话；没有需要说明的就返回空列表。
+ *
+ * 为什么抽成顶层纯函数，而不是把文案直接写在读取器里：
+ * [PackageManifestReader] 要碰 org.json，在 JVM 单测里一碰就炸 not mocked，
+ * 落在里面的文案永远测不到。文案放这里、读取器只负责追加，测试就能直接
+ * 断言「声明 proot 会产出哪句话」，也就锁住了「改执行层之前不许删这条警告」。
+ */
+fun runtimeWarnings(runtime: Runtime): List<String> = when (runtime) {
+    Runtime.ANDROID_SH -> emptyList()
+    Runtime.PROOT -> listOf(Runtime.WARNING_PROOT_NOT_APPLIED)
 }
 
 /**
@@ -148,14 +182,47 @@ data class PackageAiTool(
         const val PERMISSION_DENY = "DENY"
 
         /**
-         * 归一到三档，大小写宽容。
-         * 对齐 com.ajx.botforge.ai.tool.ToolPermission；未知写法按 ALLOW 处理，
-         * 因为清单里这一栏的默认语义就是「包作者认为它可以直接跑」。
+         * 归一到三档。解析前先 trim + uppercase。
+         *
+         * 先归一化是因为清单是手写的：`"ask"`、`" Ask "`、`"deny"` 这类写法几乎
+         * 必然出现，不该因为大小写或一个空格就被当成「认不出的档位」。
+         * 对齐 com.ajx.botforge.ai.tool.ToolPermission 的三档语义。
+         *
+         * ## 为什么未知值回落 ASK，而不是 ALLOW
+         *
+         * 这一栏的取值要分两类情况，混在一起处理就会出错：
+         *
+         *  - **空值或缺失**：作者根本没写，等于没表态。此时用调用方给的
+         *    [fallback]，默认 [PERMISSION_ALLOW]——这与本次修正之前的行为
+         *    一致，不算语义变更，只是把「没写」和「写错」分开。
+         *  - **非空但认不出**：作者确实写了，只是拼错（`"deny"`、`"ASK "`）
+         *    或者写了更高版本才有的档位。这一类才是危险来源。
+         *
+         * 第二类如果回落到 ALLOW，后果是「拼错一个字母 → 这个工具从需要用户
+         * 表态变成无条件直连执行」，错误方向指向更危险的一侧，而且出错的
+         * 概率完全不可控：漏个大写、多个空格、未来加第四档，任何一次手误都会
+         * 把作者本意想加的限制悄悄打开，且不留任何痕迹。
+         *
+         * 回落到 ASK 则相反。ASK 的语义是「用户还没表态」：工具不进 schema、
+         * 或者走人工确认，既不执行也不静默放行，用户可以在设置页看到它、
+         * 再把它改成 ALLOW 或 DENY 来表态。也就是说错的时候代价是
+         * 「少一个工具能用」，而不是「多一个工具擅自跑了」。
+         *
+         * 安全默认必须站在代价更小的那一侧：这里选 ASK，宁可保守地拦住，
+         * 也不替作者做「允许执行」的决定。
          */
-        fun normalizePermission(raw: String?): String = when (raw?.trim()?.uppercase()) {
-            PERMISSION_ASK -> PERMISSION_ASK
-            PERMISSION_DENY -> PERMISSION_DENY
-            else -> PERMISSION_ALLOW
+        fun normalizePermission(
+            raw: String?,
+            fallback: String = PERMISSION_ALLOW
+        ): String {
+            val key = raw?.trim()?.uppercase() ?: return fallback
+            if (key.isEmpty()) return fallback
+            return when (key) {
+                PERMISSION_ALLOW -> PERMISSION_ALLOW
+                PERMISSION_ASK -> PERMISSION_ASK
+                PERMISSION_DENY -> PERMISSION_DENY
+                else -> PERMISSION_ASK
+            }
         }
     }
 }
@@ -184,14 +251,31 @@ data class PackageParam(
     }
 }
 
-/** App 内面板上的一个动作（v1 tool.json 迁移后就落成一条这个）。 */
+/**
+ * App 内面板上的一个动作（v1 tool.json 迁移后就落成一条这个）。
+ *
+ * [timeoutSec] 是从 v1 `tool.json` 的 `timeoutSec`（默认 60）原样带过来的，
+ * v2 的 `ui_actions` 也可以显式声明它。这一栏必须留着：v1 里的 `timeoutSec`
+ * 在旧执行层有真实消费者（直接拿它当进程超时），迁移时把它丢掉，等于把作者
+ * 调好的超时悄悄改回默认值——一个声明 20 秒的动作会被当成 60 秒跑，用户只
+ * 会看到「这个动作卡很久」，而且查不出原因，因为清单里的数字根本没进模型。
+ *
+ * 这里存的是**声明原值**，不做钳制。钳制是执行层的策略，模型层擅自改数会让
+ * 排查时看到的数字与清单对不上；需要安全边界时由调用方自行 coerce。
+ */
 data class PackageUiAction(
     val id: String,
     val label: String = "",
     val description: String = "",
     val entry: String = "run.sh",
-    val params: List<PackageParam> = emptyList()
-)
+    val params: List<PackageParam> = emptyList(),
+    val timeoutSec: Int = DEFAULT_TIMEOUT_SEC
+) {
+    companion object {
+        /** 与 v1 tools/ToolManifest.kt 的 ToolManifest.timeoutSec 默认值保持一致，迁移时不产生数值漂移 */
+        const val DEFAULT_TIMEOUT_SEC = 60
+    }
+}
 
 /**
  * 包声明的一项权限及理由。
