@@ -8,11 +8,16 @@ import android.content.SharedPreferences
  * 规划书原则：白名单必须用 openid，因为官方机器人 API 拿不到 QQ 号。
  * 黑名单不作为防线——只能挡明显滥用的，真正的安全靠白名单默认拒绝。
  *
- * 策略：
- *  - 白名单为空 → 视为「未配置」，允许所有私聊执行（方便首次使用）
+ * 策略（默认拒绝）：
+ *  - 白名单为空 → 拒绝一切私聊插件执行
  *  - 白名单非空 → 只有名单内的 openid 能执行插件
  *  - 群聊默认不执行插件，除非群在群白名单里
  *  - 所有插件执行都记审计日志
+ *
+ * 为什么从「默认放行」改成「默认拒绝」：
+ * 插件是第三方脚本，拥有本应用的读写权限。原先白名单为空时放行所有私聊，
+ * 意味着新装用户只要知道机器人 openid 就能触发任意插件脚本，而用户
+ * 完全不知道这件事发生过。默认拒绝 + 首次使用显式加自己，才是对的默认值。
  */
 object PluginGuard {
 
@@ -72,8 +77,9 @@ object PluginGuard {
         val users = allowedUsers()
 
         if (scene == "c2c") {
-            // 白名单为空 = 未配置，允许（首次使用门槛低）
-            if (users.isEmpty()) return null
+            // 白名单为空 = 未授权任何人，一律拒绝。
+            // 首次使用引导见 PluginGuardHint（设置页会提示先把自己加进白名单）。
+            if (users.isEmpty()) return "插件未授权：请先在设置里把自己加入插件白名单"
             return if (users.contains(userOpenId)) null else "你不在插件白名单里"
         }
 

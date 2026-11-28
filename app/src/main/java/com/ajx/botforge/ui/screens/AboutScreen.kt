@@ -1,6 +1,10 @@
 package com.ajx.botforge.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.background
@@ -147,6 +151,56 @@ fun AboutScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(Spacing.xl))
 
+            // ---------------------------------------------------------- 社区
+            // 为什么把 QQ 群单独成节而不是塞进「帮助与反馈」：
+            // 这是本项目唯一的实时交流入口，用户找不到人问就会直接卸载。
+            // 群号做成可点击复制，因为 Android 无法可靠地直接跳转 QQ 群链接
+            // （需要 QQ 号 + 群 key，且各版本 scheme 不一致），复制是最稳的。
+            SectionHeader("社区")
+            Spacer(Modifier.height(Spacing.sm))
+            InfoGroup {
+                CopyRow(
+                    label = "QQ 群",
+                    value = Txt.ABOUT_QQ_GROUP,
+                    onCopy = {
+                        copyToClipboard(ctx, Txt.ABOUT_QQ_GROUP)
+                        Toast.makeText(ctx, "群号已复制", Toast.LENGTH_SHORT).show()
+                    }
+                )
+                InGroupDivider()
+                LinkRow(
+                    label = "问题反馈",
+                    value = "github.com/a2006-dev/BotForge/issues",
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://github.com/a2006-dev/BotForge/issues")
+                                )
+                            )
+                        }
+                    }
+                )
+                InGroupDivider()
+                LinkRow(
+                    label = "更新日志",
+                    value = "Releases",
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://github.com/a2006-dev/BotForge/releases")
+                                )
+                            )
+                        }
+                    }
+                )
+            }
+
+            Spacer(Modifier.height(Spacing.xl))
+
             // ---------------------------------------------------------- 帮助与反馈
             SectionHeader("帮助与反馈")
             Spacer(Modifier.height(Spacing.sm))
@@ -177,8 +231,7 @@ fun AboutScreen(onBack: () -> Unit) {
                         }
                     }
                 )
-                InGroupDivider()
-                InfoLine("反馈方式", Txt.ABOUT_HELP_ISSUE)
+
             }
 
             Spacer(Modifier.height(Spacing.xl))
@@ -296,6 +349,48 @@ private fun InfoLine(label: String, value: String, mono: Boolean = false) {
             lineHeight = LineHeight.normal,
             modifier = Modifier.weight(1f)
         )
+    }
+}
+
+/**
+ * 可复制行：右侧显示「复制」。
+ *
+ * 为什么不直接用 LinkRow 跳转：QQ 群链接需要群号 + 群 key，
+ * 且各版本 QQ 的 scheme 不一致，跳转失败率高。复制群号让用户自己粘贴，
+ * 多一步操作但永远可用 —— 关于页里失效的链接比没有链接更糟。
+ */
+@Composable
+private fun CopyRow(label: String, value: String, onCopy: () -> Unit) {
+    val c = botColors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onCopy)
+            .padding(horizontal = Spacing.md, vertical = Spacing.md),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = c.textMid,
+            fontSize = FontSize.small,
+            modifier = Modifier.width(88.dp)
+        )
+        Spacer(Modifier.width(Spacing.sm))
+        Text(
+            text = value,
+            color = c.textHigh,
+            fontSize = FontSize.small,
+            modifier = Modifier.weight(1f)
+        )
+        Text(text = "复制", color = c.brand, fontSize = FontSize.caption)
+    }
+}
+
+/** 写入系统剪贴板。API 33 起 ClipboardManager 的 setPrimaryClip 不需要额外权限。 */
+private fun copyToClipboard(ctx: Context, text: String) {
+    runCatching {
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("BotForge", text))
     }
 }
 

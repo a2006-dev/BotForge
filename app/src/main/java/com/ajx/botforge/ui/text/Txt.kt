@@ -220,6 +220,10 @@ object Txt {
     const val ABOUT_HELP_OFFICIAL = "QQ 开放平台文档"
     const val ABOUT_HELP_REPO = "代码仓库"
     const val ABOUT_HELP_ISSUE = "问题反馈"
+    
+    /** 官方交流群。关于页与 README 共用同一份群号，改这里即可。 */
+    const val ABOUT_QQ_GROUP = "1012917975"
+
     const val ABOUT_OSS_TITLE = "开源组件"
     const val ABOUT_ENV_TITLE = "运行环境"
     const val ABOUT_ENV_MODEL = "设备型号"
