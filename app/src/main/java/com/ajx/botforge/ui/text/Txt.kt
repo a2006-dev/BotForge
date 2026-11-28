@@ -640,4 +640,156 @@ object Txt {
 
     /** 底部提示：保留上限 */
     const val MEM_LIMIT_HINT = "每个会话最多保留最近 120 条消息，超出后最早的记录被自动丢弃。清空只删本地记忆文件，不影响机器人配置与人设。"
+    // ==================== 能力清单（只读看板） ====================
+    // 本页只做「陈述事实」：有哪些包、包开没开、每个工具什么权限档。
+    // 编辑入口在 设置 → 工具包与权限，两处文案不要互相抄，改了这里不用改那边。
+
+    /** 能力清单页副标题 */
+    const val CAP_SUBTITLE = "当前可用的工具与权限档"
+
+    /** 空态标题：注册表里一个包都没有 */
+    const val CAP_EMPTY_TITLE = "未发现可用工具"
+
+    /** 空态说明：给出唯一可执行的下一步，不编造原因 */
+    const val CAP_EMPTY_DESC = "内置工具包尚未注册。可点右上角刷新重试，或重启应用后重新进入"
+
+    /**
+     * 顶部总览：已启用包数 · 工具总数 · 需确认数。
+     *
+     * 只用非定位格式符（%d），不用 %1$d：Kotlin 字符串模板把 `$` 当插值起始，
+     * `%1$d` 里的 `$d` 会被解析成变量引用，直接编译不过。
+     */
+    const val CAP_OVERVIEW_FMT = "已启用 %d 个包 · 共 %d 个工具 · 其中 %d 个需要确认"
+
+    /** 总览补充：解释「需要确认」在无人值守场景下的真实含义 */
+    const val CAP_OVERVIEW_SUB = "需要确认的工具不会真的执行：机器人跑在后台，没有可以点确认的界面，这一类按未授权处理"
+
+    /** 核心包标记：避免用户去设置里找一个不存在的开关 */
+    const val CAP_LOCKED = "核心包，不可关闭"
+
+    /** 包内工具数量 */
+    const val CAP_TOOL_COUNT_FMT = "%d 个工具"
+
+    /** 权限档：允许 */
+    const val CAP_PERM_ALLOW = "允许"
+
+    /** 权限档：需确认 */
+    const val CAP_PERM_ASK = "需确认"
+
+    /** 权限档：已禁用 */
+    const val CAP_PERM_DENY = "已禁用"
+
+    /** 整包停用时的尾注，参数为包内工具数 */
+    const val CAP_PKG_OFF_NOTE_FMT = "此包已停用，包内 %d 个工具都不会交给模型"
+
+    /** 包内存在禁用工具时的尾注，参数为被禁用的工具数 */
+    const val CAP_DENY_NOTE_FMT = "其中 %d 个工具已禁用，不会交给模型"
+
+    /** 页面底部：需确认档的说明 */
+    const val CAP_ASK_NOTE = "「需确认」的工具仍会出现在模型可见的工具列表里，但执行前会被拦下，模型收到的是未授权提示，而不是静默执行。"
+
+    /** 页面底部：本页只读，编辑在别处 */
+    const val CAP_READONLY_NOTE = "本页只读。开关包与调整单个工具的权限在 设置 → 工具包与权限，改动立即生效。"
+
+    /** 设置页入口说明 */
+    const val CAP_ENTRY_DESC = "只读查看当前启用的包与工具，以及每个工具的权限档"
+
+    /** 设置页入口按钮 */
+    const val CAP_ENTRY_ACTION = "查看"
+
+    // ---------------------------------------------------------------- 审计日志
+    // 命名统一 AUDIT_ 前缀，避开其它子代理同时新增的常量。
+
+    /** 设置页入口说明 */
+    const val AUDIT_ENTRY_DESC = "查看模型调用过哪些工具、每次决策与结果"
+
+    /** 设置页入口按钮 */
+    const val AUDIT_ENTRY_ACTION = "查看"
+
+    /** 页面副标题：共 N 条记录 */
+    const val AUDIT_SUBTITLE_FMT = "共 %d 条记录"
+
+    /** 筛选档位：全部 */
+    const val AUDIT_FILTER_ALL_FMT = "全部 %d"
+
+    /** 筛选档位：放行 */
+    const val AUDIT_FILTER_ALLOW_FMT = "放行 %d"
+
+    /** 筛选档位：待确认 */
+    const val AUDIT_FILTER_ASK_FMT = "待确认 %d"
+
+    /** 筛选档位：拒绝 */
+    const val AUDIT_FILTER_DENY_FMT = "拒绝 %d"
+
+    /** 决策：直接放行 */
+    const val AUDIT_DECISION_ALLOW = "放行"
+
+    /** 决策：询问后同意 */
+    const val AUDIT_DECISION_ASK_OK = "确认同意"
+
+    /** 决策：询问后拒绝或超时 */
+    const val AUDIT_DECISION_ASK_DENY = "确认拒绝"
+
+    /** 决策：权限档位拒绝，未执行 */
+    const val AUDIT_DECISION_BLOCKED = "已拦截"
+
+    /** 决策无法识别的兼容文案 */
+    const val AUDIT_DECISION_UNKNOWN = "未知决策"
+
+    /** 结果：执行成功 */
+    const val AUDIT_RESULT_SUCCESS = "成功"
+
+    /** 结果：已执行但失败 */
+    const val AUDIT_RESULT_FAILED = "失败"
+
+    /** 结果：未执行，被拦截 */
+    const val AUDIT_RESULT_BLOCKED = "未执行"
+
+    /** 结果：未执行，用户拒绝 */
+    const val AUDIT_RESULT_DENIED = "已拒绝"
+
+    /** 调用来源：机器人 · 场景 · 对象尾号 */
+    const val AUDIT_SOURCE_FMT = "%s · %s · %s"
+
+    /** 耗时：N ms */
+    const val AUDIT_COST_FMT = "%d ms"
+
+    /** 工具名缺失的兼容文案 */
+    const val AUDIT_UNKNOWN_TOOL = "未知工具"
+
+    /** 机器人名缺失的兼容文案 */
+    const val AUDIT_UNKNOWN_BOT = "未知机器人"
+
+    /** 系统自发动作没有发起人 */
+    const val AUDIT_NO_USER = "无发起人"
+
+    /** 未知或非进程类工具没有退出码 */
+    const val AUDIT_NO_EXIT = "不适用"
+
+    /** 内置工具不属于任何扩展包 */
+    const val AUDIT_BUILTIN_PACKAGE = "内置工具"
+
+    /** 展开区标签：场景 */
+    const val AUDIT_LABEL_SCENE = "场景"
+
+    /** 展开区标签：发起人完整 openid */
+    const val AUDIT_LABEL_USER = "发起人"
+
+    /** 展开区标签：来源扩展包 */
+    const val AUDIT_LABEL_PACKAGE = "来源包"
+
+    /** 展开区标签：退出码 */
+    const val AUDIT_LABEL_EXIT = "退出码"
+
+    /** 空态标题：完全没有记录 */
+    const val AUDIT_EMPTY_TITLE = "暂无审计记录"
+
+    /** 空态说明：完全没有记录 */
+    const val AUDIT_EMPTY_DESC = "工具调用发生后，这里会显示时间、来源、决策与参数摘要。审计文件按天存放在应用私有目录，不会被普通日志清理。"
+
+    /** 空态标题：当前筛选无结果 */
+    const val AUDIT_EMPTY_FILTER_TITLE = "当前筛选无记录"
+
+    /** 空态说明：当前筛选无结果 */
+    const val AUDIT_EMPTY_FILTER_DESC = "已加载的记录中没有匹配该决策类型的条目。切回「全部」可查看全部记录。"
 }

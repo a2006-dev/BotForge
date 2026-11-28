@@ -28,6 +28,18 @@ object Routes {
     const val TOOL_PACKAGES = "tools/packages"
     /** 记忆管理：按会话列出本地记忆文件、预览与清理。 */
     const val MEMORY = "memory"
+    /**
+     * 能力清单：只读查看当前有哪些包、每个包里有哪些工具、各自什么权限档。
+     *
+     * 与 [TOOL_PACKAGES] 分工：那一页负责改（开关包、切权限），本页只负责看。
+     */
+    const val CAPABILITIES = "capabilities"
+    /**
+     * 工具调用审计日志：时间、工具名、调用来源、决策与参数摘要。
+     *
+     * 只读页，不提供清理与导出入口；清理仍走 AuditStore.prune 自动过期。
+     */
+    const val AUDIT_LOG = "audit/log"
 
     /**
      * 应用内试聊页：选定人设 + 模型 + 是否带工具，直接在 App 内测试对话与工具调用。

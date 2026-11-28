@@ -8,8 +8,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ajx.botforge.ui.screens.AboutScreen
+import com.ajx.botforge.ui.screens.AuditLogScreen
 import com.ajx.botforge.ui.screens.BotEditScreen
 import com.ajx.botforge.ui.screens.BotListScreen
+import com.ajx.botforge.ui.screens.CapabilitiesScreen
 import com.ajx.botforge.ui.screens.DashboardScreen
 import com.ajx.botforge.ui.screens.GroupListScreen
 import com.ajx.botforge.ui.screens.LogScreen
@@ -158,6 +160,7 @@ fun AppNavHost(
                 onApplyShizuku = onApplyShizuku,
                 onReloadBots = onReloadBots,
                 onOpenToolPackages = { navController.navigate(Routes.TOOL_PACKAGES) },
+                onOpenCapabilities = { navController.navigate(Routes.CAPABILITIES) },
                 onOpenTestChat = { navController.navigate(Routes.TEST_CHAT) },
                 onOpenMemory = { navController.navigate(Routes.MEMORY) },
                 // 设置页的「终端环境 → 配置/重装」跳这里。
@@ -186,12 +189,20 @@ fun AppNavHost(
             ToolPackageScreen(onBack = { navController.popBackStack() })
         }
 
+        composable(Routes.CAPABILITIES) {
+            CapabilitiesScreen(onBack = { navController.popBackStack() })
+        }
+
         composable(Routes.TEST_CHAT) {
             TestChatScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.MEMORY) {
             MemoryScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.AUDIT_LOG) {
+            AuditLogScreen(onBack = { navController.popBackStack() })
         }
     }
 }

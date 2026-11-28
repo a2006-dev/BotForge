@@ -61,7 +61,9 @@ fun SettingsScreen(
     onOpenTerminal: () -> Unit = {},
     onOpenToolPackages: () -> Unit = {},
     onOpenTestChat: () -> Unit = {},
-    onOpenMemory: () -> Unit = {}
+    onOpenMemory: () -> Unit = {},
+    onOpenCapabilities: () -> Unit = {},
+    onOpenAuditLog: () -> Unit = {}
 ) {
     val c = botColors
     val themeMode by UiPrefs.themeMode.collectAsState()
@@ -303,6 +305,32 @@ fun SettingsScreen(
                     SmallButton(text = "试聊", onClick = onOpenTestChat)
                 }
                 SettingDivider()
+                // 能力清单入口。紧挨试聊：用户刚看完「能调哪些工具」，
+                // 下一个问题通常是「那它现在到底能干什么」。
+                // 本页只读，要改开关与权限仍走上一条「工具包与权限」。
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenCapabilities)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = Txt.TITLE_CAPABILITIES,
+                            color = c.textHigh,
+                            fontSize = FontSize.body,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = Txt.CAP_ENTRY_DESC,
+                            color = c.textLow,
+                            fontSize = FontSize.caption
+                        )
+                    }
+                    SmallButton(text = Txt.CAP_ENTRY_ACTION, onClick = onOpenCapabilities)
+                }
+                SettingDivider()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -371,6 +399,18 @@ fun SettingsScreen(
                     desc = "一键放开后台限制",
                     action = "执行",
                     onClick = onApplyShizuku
+                )
+            }
+
+            SectionHeader("安全")
+            SettingGroup {
+                // 审计入口单独成区：它回答「模型到底动过什么」，与记忆、保活不是一类事，
+                // 混在里面会被当成又一个开关行。
+                ActionRow(
+                    title = Txt.TITLE_AUDIT,
+                    desc = Txt.AUDIT_ENTRY_DESC,
+                    action = Txt.AUDIT_ENTRY_ACTION,
+                    onClick = onOpenAuditLog
                 )
             }
 
