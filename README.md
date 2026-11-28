@@ -292,4 +292,9 @@ Release 包由 CI 构建：推送 `v*` 标签会触发构建并把 APK 发布到
 
 <div align="center">
 <sub>BotForge 与腾讯 / QQ 无隶属关系。请遵守 QQ 用户协议与适用法律。</sub>
+
+<br/>
+<br/>
+
+*Made with ❤️ by [a2006-dev](https://github.com/a2006-dev)*
 </div>
